@@ -47,6 +47,8 @@ export default function LoginPage() {
       localStorage.setItem('access_token', access_token);
       localStorage.setItem('user_profile', JSON.stringify(user));
 
+      document.cookie = `access_token=${access_token}; path=/; max-age=86400; SameSite=Lax;`;
+
       // Toast Sukses
       Toast.fire({
         icon: 'success',

@@ -27,3 +27,4 @@ export default function OverviewContent({ adminName }: OverviewContentProps) {
       <TipsAlert />
     </div>
   );
+}

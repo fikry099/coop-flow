@@ -14,10 +14,20 @@ class Land extends Model
         'land_name',
         'area',
         'location_address',
+        'polygon_coordinates', 
+    ];
+
+    protected $casts = [
+        'polygon_coordinates' => 'array',
     ];
 
     public function farmer()
     {
         return $this->belongsTo(Farmer::class);
+    }
+
+    public function plants()
+    {
+        return $this->hasMany(Plant::class);
     }
 }

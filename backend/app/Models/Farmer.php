@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Farmer extends Model
 {
@@ -12,7 +13,7 @@ class Farmer extends Model
 
     protected $fillable = [
         'user_id',
-        'farmer_group',
+        'farmer_group_id',
         'nik',
         'total_land_area',
         'notes',
@@ -26,7 +27,18 @@ class Farmer extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function lands()
+    /**
+     * RELASI: Petani termasuk ke dalam sebuah Kelompok Tani
+     */
+    public function farmer_group(): BelongsTo
+    {
+        return $this->belongsTo(FarmerGroup::class, 'farmer_group_id');
+    }
+
+    /**
+     * Relasi ke model Land (Lahan)
+     */
+    public function lands(): HasMany
     {
         return $this->hasMany(Land::class);
     }

@@ -17,10 +17,9 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
-            
-            // Tambahkan kolom baru di sini untuk profil petani/admin
-            $table->string('phone')->nullable()->unique(); // Nomor telepon/WA untuk koordinasi
-            $table->text('address')->nullable();          // Alamat rumah atau domisili kelompok tani
+        
+            $table->string('phone')->nullable()->unique(); 
+            $table->text('address')->nullable();        
             
             $table->rememberToken();
             $table->timestamps();

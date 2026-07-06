@@ -8,7 +8,6 @@ import Swal from 'sweetalert2';
 import Navbar from '@/app/components/dashboard/Navbar';
 import api from '../../../lib/axios'; 
 
-// Import komponen-komponen terpisah
 import FarmerList from '@/app/components/dashboard/farmers/FarmerList';
 import FarmerForm from '@/app/components/dashboard/farmers/FarmerForm';
 import EmptyState from '@/app/components/dashboard/farmers/EmptyState';
@@ -17,24 +16,24 @@ export default function DataPetaniPage() {
   const router = useRouter();
   const [adminName, setAdminName] = useState('Andi');
   const [farmers, setFarmers] = useState([]);
+  const [farmerGroups, setFarmerGroups] = useState([]); // STATE BARU: Untuk menyimpan daftar kelompok tani
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFarmer, setSelectedFarmer] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
 
-  // 1. SESUAIKAN: State Form Data sekarang menyertakan array lands
+  // KONDISI BARU: Menggunakan farmer_group_id ber-tipe data integer/string kosong di awal
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
     address: '',
-    farmer_group: 'Kelompok Tani Makmur A',
+    farmer_group_id: '', 
     nik: '',
     notes: '',
-    lands: [{ land_name: '', area: 0, location_address: '' }] // Baris default awal
+    lands: [{ land_name: '', area: 0, location_address: '' }]
   });
 
-  // Konfigurasi reusable untuk Toast Kanan Atas
   const Toast = Swal.mixin({
     toast: true,
     position: 'top-end',
@@ -47,7 +46,7 @@ export default function DataPetaniPage() {
     }
   });
 
-  // Fetch semua data petani dari Backend Laravel via Docker
+  // Fetch semua data petani
   const fetchFarmers = async () => {
     try {
       const response = await api.get('/farmers');
@@ -59,6 +58,22 @@ export default function DataPetaniPage() {
     }
   };
 
+  // FUNGSI BARU: Fetch daftar kelompok tani untuk opsi dropdown
+  const fetchFarmerGroups = async () => {
+    try {
+      const response = await api.get('/farmer-groups');
+      if (response.data.success) {
+        setFarmerGroups(response.data.data);
+        // Set default value jika menambahkan petani baru
+        if (isAdding && response.data.data.length > 0 && !formData.farmer_group_id) {
+          setFormData(prev => ({ ...prev, farmer_group_id: response.data.data[0].id.toString() }));
+        }
+      }
+    } catch (error) {
+      console.error("Gagal memuat data kelompok tani", error);
+    }
+  };
+
   useEffect(() => {
     const profile = localStorage.getItem('user_profile');
     if (profile) {
@@ -66,9 +81,9 @@ export default function DataPetaniPage() {
       if (parsed.name) setAdminName(parsed.name);
     }
     fetchFarmers();
+    fetchFarmerGroups(); // Panggil di awal mount
   }, []);
 
-  // 2. SESUAIKAN: Fungsi saat baris petani dipilih (Membawa data lands dari database)
   const handleSelectFarmer = (farmer: any) => {
     setIsAdding(false);
     setSelectedFarmer(farmer);
@@ -77,21 +92,21 @@ export default function DataPetaniPage() {
       email: farmer.user?.email || '',
       phone: farmer.user?.phone || '',
       address: farmer.user?.address || '',
-      farmer_group: farmer.farmer_group,
+      farmer_group_id: farmer.farmer_group_id ? farmer.farmer_group_id.toString() : '', // SESUAIKAN
       nik: farmer.nik,
       notes: farmer.notes || '',
-      // Map data lands jika ada, jika kosong sediakan 1 template inputan
       lands: farmer.lands && farmer.lands.length > 0 
         ? farmer.lands.map((l: any) => ({
+            id: l.id, 
             land_name: l.land_name,
             area: parseFloat(l.area) || 0,
-            location_address: l.location_address || ''
+            location_address: l.location_address || '',
+            polygon_coordinates: l.polygon_coordinates || null 
           }))
-        : [{ land_name: '', area: 0, location_address: '' }]
+        : [{ land_name: '', area: 0, location_address: '', polygon_coordinates: null }]
     });
   };
 
-  // 3. SESUAIKAN: Reset form data ke kondisi awal saat klik tambah baru
   const handleInitAdd = () => {
     setSelectedFarmer(null);
     setIsAdding(true);
@@ -100,10 +115,10 @@ export default function DataPetaniPage() {
       email: '', 
       phone: '', 
       address: '', 
-      farmer_group: 'Kelompok Tani Makmur A', 
+      farmer_group_id: farmerGroups.length > 0 ? (farmerGroups[0] as any).id.toString() : '', // SESUAIKAN
       nik: '', 
       notes: '',
-      lands: [{ land_name: '', area: 0, location_address: '' }] // Reset ke 1 baris kosong
+      lands: [{ land_name: '', area: 0, location_address: '' }] 
     });
   };
 
@@ -136,6 +151,45 @@ export default function DataPetaniPage() {
     }
   };
 
+  // FUNGSI BARU: Aksi tambah Kelompok Tani via Pop-up Form Terintegrasi SweetAlert2
+  const handleAddFarmerGroupInline = async () => {
+    const { value: formValues } = await Swal.fire({
+      title: 'Tambah Kelompok Tani Baru',
+      html:
+        '<input id="swal-input-name" class="swal2-input font-sans text-sm" placeholder="Nama Kelompok Tani (ex: Tani Makmur B)">' +
+        '<textarea id="swal-input-desc" class="swal2-textarea font-sans text-sm" placeholder="Deskripsi/Keterangan Kelompok Tani (Opsional)"></textarea>',
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Simpan',
+      cancelButtonText: 'Batal',
+      confirmButtonColor: '#2563eb',
+      preConfirm: () => {
+        const name = (document.getElementById('swal-input-name') as HTMLInputElement).value;
+        const description = (document.getElementById('swal-input-desc') as HTMLTextAreaElement).value;
+        if (!name) {
+          Swal.showValidationMessage('Nama kelompok tani wajib diisi!');
+        }
+        return { name, description };
+      }
+    });
+
+    if (formValues) {
+      try {
+        const response = await api.post('/farmer-groups', formValues);
+        if (response.data.success) {
+          Toast.fire({ icon: 'success', title: 'Kelompok Tani Baru berhasil dibuat!' });
+          // Ambil ulang data kelompok tani terbaru dari API
+          await fetchFarmerGroups();
+          // Otomatis ubah form pilihan petani aktif ke kelompok tani yang baru saja dibuat
+          setFormData(prev => ({ ...prev, farmer_group_id: response.data.data.id.toString() }));
+        }
+      } catch (error: any) {
+        const errMessage = error.response?.data?.name ? error.response.data.name[0] : 'Gagal menyimpan kelompok tani.';
+        Toast.fire({ icon: 'error', title: errMessage });
+      }
+    }
+  };
+
   const handleDeleteFarmer = async () => {
     if (!selectedFarmer) return;
 
@@ -165,7 +219,8 @@ export default function DataPetaniPage() {
     <div className="min-h-screen bg-[#f8fafc] text-zinc-800 antialiased font-sans pb-12">
       <Navbar adminName={adminName} handleLogout={() => router.push('/auth/login')} />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+      <div className="max-w-8xl mx-auto px-4 sm:px-6 lg:px-13 mt-6">
+        {/* Header Section */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
             <Link 
@@ -204,6 +259,8 @@ export default function DataPetaniPage() {
                 isAdding={isAdding}
                 formData={formData}
                 setFormData={setFormData}
+                farmerGroups={farmerGroups} // OPER DATA BARU KE SINI
+                onAddFarmerGroupClick={handleAddFarmerGroupInline} // OPER TRIGGER MODAL
                 onSubmit={handleSaveFarmer}
                 onCancel={() => { setSelectedFarmer(null); setIsAdding(false); }}
                 onDelete={handleDeleteFarmer}

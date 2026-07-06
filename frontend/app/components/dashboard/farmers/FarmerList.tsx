@@ -6,7 +6,8 @@ import { FaSearch, FaUserPlus, FaUserAlt } from 'react-icons/fa';
 interface Farmer {
   id: number;
   user_id?: number;
-  farmer_group: string;
+  farmer_group_id?: number; // AMBIL ID
+  farmer_group?: { id: number; name: string }; // AKOMODASI RELASI TERBARU DARI LARAVEL
   nik: string;
   total_land_area?: number;
   notes?: string;
@@ -16,7 +17,6 @@ interface Farmer {
     phone: string;
     address: string;
   };
-  // Fallback untuk support data lokal jika ada
   name?: string;
   phone?: string;
   address?: string;
@@ -72,7 +72,8 @@ export default function FarmerList({
       <div className="space-y-3 max-h-[580px] overflow-y-auto pr-1">
         {filteredFarmers.map((farmer) => {
           const name = farmer.user?.name || farmer.name;
-          const phone = farmer.user?.phone || farmer.phone;
+          // MODIFIKASI DISINI: Ambil nama kelompok tani dari objek relasi DB
+          const groupName = farmer.farmer_group?.name || 'Belum Ada Kelompok Tani';
           
           return (
             <div 
@@ -90,7 +91,8 @@ export default function FarmerList({
                   <div className="space-y-0.5">
                     <h3 className="text-sm font-bold text-zinc-800">{name}</h3>
                     <p className="text-xs text-zinc-400 font-medium">NIK: {farmer.nik}</p>
-                    <p className="text-xs text-zinc-500 font-medium mt-1">{farmer.farmer_group}</p>
+                    {/* GUNAKAN NAMA KELOMPOK TANI DINAMIS */}
+                    <p className="text-xs text-zinc-500 font-bold mt-1 text-blue-600">{groupName}</p>
                   </div>
                 </div>
                 <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${

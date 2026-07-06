@@ -3,6 +3,8 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ParcelController;
 use App\Http\Controllers\FarmerController; 
+use App\Http\Controllers\FarmerGroupController;
+use App\Http\Controllers\PlantController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -30,10 +32,16 @@ Route::middleware('auth:sanctum')->group(function () {
     // Route untuk Logout (Hapus Token)
     Route::post('/logout', [AuthController::class, 'logout']);
 
+    // Endpoint CRUD Kelompok Tani
+    Route::apiResource('farmer-groups', FarmerGroupController::class);
+
     // Route API CRUD Master Petani
     Route::apiResource('farmers', FarmerController::class);
 
     // Route untuk menyimpan Lahan Spasial Baru
     Route::post('/parcels', [ParcelController::class, 'store']);
+
+    // Route untuk kelola tanaman
+    Route::apiResource('plants', PlantController::class);
     
 });

@@ -6,7 +6,15 @@ import api from "../../lib/axios";
 import Swal from "sweetalert2";
 import { FiBarChart2, FiUsers, FiTrendingUp } from "react-icons/fi";
 
-// Konfigurasi Standar Toast SweetAlert2 asli milik Anda
+
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // Konfigurasi Standar Toast SweetAlert2 asli milik Anda
 const Toast = Swal.mixin({
   toast: true,
   position: "top-end",
@@ -18,12 +26,6 @@ const Toast = Swal.mixin({
     toast.addEventListener("mouseleave", Swal.resumeTimer);
   },
 });
-
-export default function LoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
 
   // Fungsi Logika Utama asli milik Anda (Tidak Disentuh)
   const handleLogin = async (e: React.FormEvent) => {

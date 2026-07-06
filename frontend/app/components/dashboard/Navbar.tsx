@@ -24,16 +24,15 @@ export default function Navbar({ adminName, handleLogout }: NavbarProps) {
   }, []);
 
   return (
-    <header className="h-20 bg-white border-b border-zinc-100 flex items-center justify-between px-6 lg:px-12 sticky top-0 z-50 shadow-sm shadow-zinc-100/50">
+    <header className="h-18 bg-[#107349] border-b border-green-800 flex items-center justify-between px-6 lg:px-12 sticky top-0 z-50 shadow-sm shadow-zinc-100/50">
       
       {/* Kiri: Logo & Nama App */}
       <div className="flex items-center space-x-3">
-        <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 p-1.5 shadow-md shadow-emerald-100">
+        <div className="h-8 w-8 flex items-center justify-center rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 p-1.5 shadow-md shadow-emerald-100">
           <img src="/logonobg.png" alt="Coopflow" className="h-full w-full object-contain brightness-0 invert" />
         </div>
         <div>
-          <span className="font-extrabold text-lg tracking-tight text-zinc-900 block leading-none">COOP-FLOW</span>
-          <span className="text-xs font-medium text-zinc-400 mt-0.5 block">Admin Lapangan</span>
+          <span className="font-bold text-md  text-white block leading-none">COOP-FLOW</span>
         </div>
       </div>
 
@@ -43,7 +42,7 @@ export default function Navbar({ adminName, handleLogout }: NavbarProps) {
         <input 
           type="text" 
           placeholder="Cari lahan, petani, atau aktivitas..." 
-          className="w-full bg-[#f4f4f5] text-sm text-zinc-700 pl-11 pr-4 py-2.5 rounded-full border border-transparent focus:outline-none focus:bg-white focus:border-zinc-200 transition-all duration-200 placeholder:text-zinc-400"
+          className="w-full bg-[#f4f4f5] text-sm text-zinc-700 pl-11 pr-4 py-1 rounded-full border border-transparent focus:outline-none focus:bg-white focus:border-zinc-200 transition-all duration-200 placeholder:text-zinc-400"
         />
       </div>
 
@@ -60,7 +59,7 @@ export default function Navbar({ adminName, handleLogout }: NavbarProps) {
         </div>
 
         {/* Notifikasi Bell dengan badge angka merah */}
-        <button className="relative p-2 text-zinc-400 hover:text-zinc-700 rounded-full hover:bg-zinc-50 transition">
+        <button className="relative p-2 text-yellow-500 hover:text-zinc-700 rounded-full hover:bg-zinc-50 transition">
           <FaBell className="text-xl" />
           <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-[9px] font-extrabold text-white rounded-full flex items-center justify-center ring-2 ring-white">
             3
@@ -79,10 +78,10 @@ export default function Navbar({ adminName, handleLogout }: NavbarProps) {
               className="h-9 w-9 rounded-full object-cover border border-zinc-200 shadow-sm"
             />
             <div className="text-left hidden sm:block">
-              <p className="text-sm font-bold text-zinc-800 leading-tight transition">{adminName}</p>
-              <p className="text-[11px] font-medium text-zinc-400 mt-0.5">Admin Lapangan</p>
+              <p className="text-sm font-bold text-white leading-tight transition">{adminName}</p>
+              <p className="text-[11px] font-medium text-zinc-200 mt-0.5">Admin Lapangan</p>
             </div>
-            <FaChevronDown className="text-xs text-zinc-400 group-hover:text-zinc-600 transition" />
+            <FaChevronDown className="text-xs text-white group-hover:text-zinc-300 transition" />
           </div>
 
           {dropdownOpen && (

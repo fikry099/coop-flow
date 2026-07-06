@@ -74,7 +74,7 @@ export default function AdminLapanganDashboard() {
       <Navbar adminName={adminName} handleLogout={handleLogout} />
       
       {/* Konten Utama Tengah */}
-      <div className="max-w-8xl mx-auto px-4 sm:px-6 lg:px-10 mt-6">
+      <div className="max-w-8xl mx-auto px-4 sm:px-6 lg:px-13 mt-6">
         <OverviewContent adminName={adminName} />
       </div>
     </div>

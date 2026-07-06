@@ -8,16 +8,14 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('farmers', function (Blueprint $blueprint) {
-            $blueprint->id();
-            $blueprint->foreignId('user_id')->constrained('users')->onDelete('cascade');
-            
-            // Atribut spesifik manajemen tani
-            $blueprint->string('farmer_group')->nullable(); 
-            $blueprint->string('nik', 16)->unique()->nullable();
-            $blueprint->decimal('total_land_area', 8, 2)->default(0.00);
-            $blueprint->text('notes')->nullable(); 
-            $blueprint->timestamps();
+        Schema::create('farmers', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
+            $table->foreignId('farmer_group_id')->nullable()->constrained('farmer_groups')->onDelete('set null');
+            $table->string('nik', 16)->unique()->nullable();
+            $table->decimal('total_land_area', 8, 2)->default(0.00);
+            $table->text('notes')->nullable(); 
+            $table->timestamps();
         });
     }
 

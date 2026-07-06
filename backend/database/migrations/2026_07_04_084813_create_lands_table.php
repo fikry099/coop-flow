@@ -14,6 +14,8 @@ return new class extends Migration
             $table->string('land_name'); 
             $table->decimal('area', 8, 2); 
             $table->text('location_address')->nullable(); 
+            $table->json('polygon_coordinates')->nullable();  
+            
             $table->timestamps();
         });
     }

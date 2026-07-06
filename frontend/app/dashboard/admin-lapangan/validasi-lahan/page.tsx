@@ -1,34 +1,101 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { FaWifi, FaArrowLeft } from 'react-icons/fa';
 import Swal from 'sweetalert2';
 import Navbar from '@/app/components/dashboard/Navbar';
+import api from '../../../lib/axios'; 
 
-// Import Komponen Hasil Pemisahan Modular
 import ValidationFarmerList from '@/app/components/dashboard/land-validation/ValidationFarmerList';
 import MapWorkspace from '@/app/components/dashboard/land-validation/MapWorkspace';
 import ValidationForm from '@/app/components/dashboard/land-validation/ValidationForm';
 import EmptyValidationState from '@/app/components/dashboard/land-validation/EmptyValidationState';
 
-const initialFarmersData = [
-  { id: 1, name: 'Bapak Slamet Riyadi', nik: '3271042011740003', commodity: 'Padi', status: 'Belum Mapping', phone: '08123456789' },
-  { id: 2, name: 'Ibu Siti Aminah', nik: '3271045508820001', commodity: 'Jagung', status: 'Belum Mapping', phone: '08571234567' },
-  { id: 3, name: 'Bapak Supardi', nik: '3271041203650002', commodity: 'Hortikultura', status: 'Tersimpan Lokal (Luring)', phone: '08998765432' },
-  { id: 4, name: 'Bapak Ahmad Jaelani', nik: '3271040905790005', commodity: 'Padi', status: 'Belum Mapping', phone: '08211122334' },
-];
+export interface Land {
+  id: number;
+  farmer_id?: number;
+  land_name: string;
+  area: string | number;
+  location_address?: string;
+  polygon_coordinates?: [number, number][]; 
+}
+
+export interface Farmer {
+  id: number;
+  user_id: number;
+  farmer_group?: {      
+    id: number;
+    name: string;
+    description?: string;
+  };
+  nik: string;
+  total_land_area: string | number;
+  notes?: string;
+  user?: {
+    id: number;
+    name: string;
+    email: string;
+    phone: string;
+    address: string;
+  };
+  lands?: Land[];
+  status?: string; 
+}
 
 export default function ValidasiLahanPage() {
   const router = useRouter();
   const [adminName, setAdminName] = useState('Andi');
-  const [farmers, setFarmers] = useState(initialFarmersData);
+  const [farmers, setFarmers] = useState<Farmer[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedFarmer, setSelectedFarmer] = useState<typeof initialFarmersData[0] | null>(null);
+  const [activeTab, setActiveTab] = useState<'belum' | 'sudah'>('belum');
+  
+  const isReMappingRef = useRef<boolean>(false);
+  const previousTabRef = useRef<'belum' | 'sudah'>('belum');
+  
+  const [selectedFarmer, setSelectedFarmer] = useState<Farmer | null>(null);
+  const [selectedLand, setSelectedLand] = useState<Land | null>(null);
 
   const [plantingDate, setPlantingDate] = useState('2026-11-20');
-  const [areaHectares, setAreaHectares] = useState('1.5');
+  const [areaHectares, setAreaHectares] = useState('0');
+  const [polygonCoordinates, setPolygonCoordinates] = useState<[number, number][]>([]);
+
+  useEffect(() => {
+    if (isReMappingRef.current) {
+      isReMappingRef.current = false;
+      setPolygonCoordinates([]);
+      previousTabRef.current = activeTab;
+      return; 
+    }
+
+    if (previousTabRef.current !== activeTab) {
+      setSelectedFarmer(null);
+      setSelectedLand(null);
+      setPolygonCoordinates([]);
+      previousTabRef.current = activeTab;
+    }
+  }, [activeTab]);
+
+  const handlePolygonUpdate = (coords: [number, number][]) => {
+    setPolygonCoordinates(coords);
+    if (coords.length >= 3) {
+      const calculatedArea = (coords.length * 0.12).toFixed(2);
+      setAreaHectares(calculatedArea);
+    } else {
+      if (selectedLand) setAreaHectares(parseFloat(selectedLand.area as string).toString());
+    }
+  };
+
+  const fetchFarmers = async () => {
+    try {
+      const response = await api.get('/farmers');
+      if (response.data.success) {
+        setFarmers(response.data.data);
+      }
+    } catch (error) {
+      console.error("Gagal memuat data petani", error);
+    }
+  };
 
   useEffect(() => {
     const profile = localStorage.getItem('user_profile');
@@ -36,32 +103,116 @@ export default function ValidasiLahanPage() {
       const parsed = JSON.parse(profile);
       if (parsed.name) setAdminName(parsed.name);
     }
+    fetchFarmers();
   }, []);
 
-  const handleSaveMapping = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedFarmer) return;
+  const handleSelectLandForMapping = (farmer: Farmer, land: Land) => {
+    setSelectedFarmer(farmer);
+    setSelectedLand(land);
+    setAreaHectares(parseFloat(land.area as string).toString());
+    
+    if (land.polygon_coordinates && land.polygon_coordinates.length > 0) {
+      setPolygonCoordinates(land.polygon_coordinates);
+    } else {
+      setPolygonCoordinates([]); 
+    }
+  };
 
-    setFarmers(prev => prev.map(f => f.id === selectedFarmer.id ? { ...f, status: 'Tersimpan Lokal (Luring)' } : f));
-
-    Swal.fire({
-      icon: 'success',
-      title: 'Data Validasi Spasial Disimpan!',
-      text: `Lahan untuk ${selectedFarmer.name} berhasil direkam ke penyimpanan lokal (Offline-First).`,
-      confirmButtonColor: '#15803d',
-      customClass: { popup: 'rounded-2xl' }
-    });
-
+  const handleTabChange = (tab: 'belum' | 'sudah') => {
     setSelectedFarmer(null);
+    setSelectedLand(null);
+    setPolygonCoordinates([]);
+    setActiveTab(tab);
+  };
+
+  const handleSaveMapping = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedFarmer || !selectedLand) return;
+
+    try {
+      const payload = {
+        name: selectedFarmer.user?.name || '',
+        email: selectedFarmer.user?.email || '',
+        phone: selectedFarmer.user?.phone || null,
+        address: selectedFarmer.user?.address || null,
+        farmer_group_id: selectedFarmer.farmer_group?.id || null,
+        nik: selectedFarmer.nik,
+        notes: selectedFarmer.notes || null,
+        
+        lands: selectedFarmer.lands?.map((land) => {
+          if (land.id === selectedLand.id) {
+            return {
+              id: land.id, 
+              land_name: land.land_name,
+              area: parseFloat(areaHectares), 
+              location_address: land.location_address || null,
+              polygon_coordinates: polygonCoordinates, 
+              planting_date: plantingDate, 
+            };
+          }
+          return {
+            id: land.id, 
+            land_name: land.land_name,
+            area: parseFloat(land.area as string),
+            location_address: land.location_address || null,
+            polygon_coordinates: land.polygon_coordinates || null, 
+          };
+        }) || []
+      };
+
+      const response = await api.put(`/farmers/${selectedFarmer.id}`, payload);
+
+      if (response.data.success) {
+        const Toast = Swal.mixin({
+          toast: true,
+          position: 'top-end',
+          showConfirmButton: false,
+          timer: 3000,
+          timerProgressBar: true,
+          didOpen: (toast) => {
+            toast.addEventListener('mouseenter', Swal.stopTimer);
+            toast.addEventListener('mouseleave', Swal.resumeTimer);
+          }
+        });
+
+        Toast.fire({
+          icon: 'success',
+          title: `Geospasial "${selectedLand.land_name}" berhasil disinkronisasi!`
+        });
+
+        setSelectedFarmer(null);
+        setSelectedLand(null);
+        setPolygonCoordinates([]);
+        
+        await fetchFarmers(); 
+
+        setTimeout(() => {
+          window.dispatchEvent(new Event('resize'));
+        }, 100);
+      }
+    } catch (error: any) {
+      console.error("Gagal sinkronisasi ke backend", error);
+      
+      const ToastError = Swal.mixin({
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 4000,
+        timerProgressBar: true
+      });
+
+      ToastError.fire({
+        icon: 'error',
+        title: error.response?.data?.message || 'Gagal menyimpan ke server backend.'
+      });
+    }
   };
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-zinc-800 antialiased font-sans pb-12">
       <Navbar adminName={adminName} handleLogout={() => router.push('/auth/login')} />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
-        
-        {/* Header Section */}
+      <div className="max-w-8xl mx-auto px-4 sm:px-6 lg:px-13 mt-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
             <button 
@@ -72,50 +223,82 @@ export default function ValidasiLahanPage() {
             </button>
             <div>
               <h1 className="text-xl font-extrabold text-zinc-900 tracking-tight">Validasi Lahan Geospasial</h1>
-              <p className="text-xs text-zinc-500 font-medium">Lakukan pemetaan poligon fisik lahan dan konfirmasi profil petani</p>
+              <p className="text-xs text-zinc-500 font-medium">Filter lahan belum atau sudah dimapping sebelum melakukan validasi fisik</p>
             </div>
           </div>
           
-          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 text-emerald-700 px-3 py-1.5 rounded-xl text-xs font-semibold self-start sm:self-center shadow-sm">
+          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 text-emerald-700 px-3 py-1.5 rounded-xl text-xs font-semibold shadow-sm">
             <FaWifi />
-            <span>Mode Sinkronisasi Luring Aktif</span>
+            <span>Koneksi Server Aktif</span>
           </div>
         </div>
 
-        {/* Layout Grid Component Workspace */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          
-          {/* Panel Kiri: List Petani */}
+        {/* PERBAIKAN GRID: Menambahkan items-start agar kolom kiri & kanan tidak memanjang liar bersamaan */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Panel Kiri */}
           <div className="lg:col-span-5">
             <ValidationFarmerList 
               farmers={farmers}
               selectedFarmer={selectedFarmer}
+              selectedLand={selectedLand}
               searchTerm={searchTerm}
               setSearchTerm={setSearchTerm}
-              onSelectFarmer={(farmer) => setSelectedFarmer(farmer)}
+              onSelectLand={handleSelectLandForMapping}
+              activeTab={activeTab}
+              setActiveTab={handleTabChange} 
             />
           </div>
 
-          {/* Panel Kanan: Workspace & Form */}
-          <div className="lg:col-span-7">
-            {selectedFarmer ? (
-              <div className="space-y-6">
-                <MapWorkspace />
+          {/* Panel Kanan */}
+          <div className="lg:col-span-7 flex flex-col gap-4">
+            
+            {/* Target Header Info Lahan Aktif */}
+            {selectedFarmer && selectedLand && (
+              <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-2xl text-xs font-semibold shadow-sm flex justify-between items-center animate-fade-in">
+                <span>Target Pemetaan: <strong>{selectedFarmer.user?.name}</strong> — {selectedLand.land_name} ({selectedLand.area} Ha)</span>
+                <button 
+                  onClick={() => { setSelectedFarmer(null); setSelectedLand(null); setPolygonCoordinates([]); }} 
+                  className="text-zinc-400 hover:text-zinc-700 text-xs bg-white px-2 py-1 rounded-md border border-zinc-200 shadow-sm"
+                >
+                  Batal / Selesai Lihat
+                </button>
+              </div>
+            )}
+
+            {/* PERBAIKAN CONTEXT: Membungkus peta dalam ketinggian statis agar tidak memakan ruang ke bawah */}
+            <div className="w-full rounded-2xl overflow-hidden border border-zinc-100 shadow-sm min-h-[400px] h-[480px] relative">
+              <MapWorkspace 
+                onPolygonChange={handlePolygonUpdate} 
+                initialPolygon={polygonCoordinates} 
+                allFarmersData={farmers} 
+                selectedLandId={selectedLand?.id || null} 
+                onSelectLandDirectly={handleSelectLandForMapping}
+                activeTab={activeTab} 
+                onTriggerReMapping={() => {
+                  isReMappingRef.current = true; 
+                  setActiveTab('belum');        
+                }}
+              />
+            </div>
+
+            {/* FORM VALIDASI ATAU EMPTY STATE */}
+            <div className="w-full">
+              {selectedFarmer && selectedLand ? (
                 <ValidationForm 
                   selectedFarmer={selectedFarmer}
+                  selectedLand={selectedLand}
                   areaHectares={areaHectares}
                   setAreaHectares={setAreaHectares}
                   plantingDate={plantingDate}
                   setPlantingDate={setPlantingDate}
                   onSubmit={handleSaveMapping}
-                  onCancel={() => setSelectedFarmer(null)}
+                  onCancel={() => { setSelectedFarmer(null); setSelectedLand(null); setPolygonCoordinates([]); }}
                 />
-              </div>
-            ) : (
-              <EmptyValidationState />
-            )}
+              ) : (
+                <EmptyValidationState />
+              )}
+            </div>
           </div>
-
         </div>
       </div>
     </div>

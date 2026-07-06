@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { FaEdit, FaPlus, FaTrash } from 'react-icons/fa';
+import { FaEdit, FaPlus, FaTrash, FaFolderPlus } from 'react-icons/fa';
 
 interface Land {
   land_name: string;
@@ -16,12 +16,14 @@ interface FarmerFormProps {
     email: string;
     phone: string;
     address: string;
-    farmer_group: string;
+    farmer_group_id: string; // DIUBAH DARI farmer_group
     nik: string;
     notes: string;
-    lands: Land[]; // Struktur data lands baru berbentuk array
+    lands: Land[];
   };
   setFormData: any;
+  farmerGroups: Array<{ id: number; name: string; description?: string }>; // PROPS BARU
+  onAddFarmerGroupClick: () => void; // PROPS BARU
   onSubmit: (e: React.FormEvent) => void;
   onCancel: () => void;
   onDelete?: () => void;
@@ -31,12 +33,13 @@ export default function FarmerForm({
   isAdding,
   formData,
   setFormData,
+  farmerGroups,
+  onAddFarmerGroupClick,
   onSubmit,
   onCancel,
   onDelete
 }: FarmerFormProps) {
 
-  // Fungsi menambah baris lahan baru
   const handleAddLand = () => {
     setFormData({
       ...formData,
@@ -44,13 +47,11 @@ export default function FarmerForm({
     });
   };
 
-  // Fungsi menghapus baris lahan tertentu
   const handleRemoveLand = (index: number) => {
     const updatedLands = formData.lands.filter((_, i) => i !== index);
     setFormData({ ...formData, lands: updatedLands });
   };
 
-  // Fungsi mengubah nilai field di dalam array lahan
   const handleLandChange = (index: number, field: keyof Land, value: any) => {
     const updatedLands = formData.lands.map((land, i) => {
       if (i === index) {
@@ -121,17 +122,34 @@ export default function FarmerForm({
               placeholder="Contoh: 0812345xxx"
             />
           </div>
+          
+          {/* BAGIAN BARU: Kelompok Tani dengan integrasi Button Tambah Dinamis */}
           <div>
             <label className="block text-xs font-bold text-zinc-600 uppercase mb-1.5 tracking-wide">Kelompok Tani</label>
-            <select 
-              value={formData.farmer_group} 
-              onChange={(e) => setFormData({...formData, farmer_group: e.target.value})}
-              className="w-full border border-zinc-200 rounded-xl p-2.5 text-sm font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white transition"
-            >
-              <option value="Kelompok Tani Makmur A">Kelompok Tani Makmur A</option>
-              <option value="Kelompok Tani Rejeki">Kelompok Tani Rejeki</option>
-              <option value="Kelompok Tani Subur">Kelompok Tani Subur</option>
-            </select>
+            <div className="flex gap-2">
+              <select 
+                value={formData.farmer_group_id} 
+                onChange={(e) => setFormData({...formData, farmer_group_id: e.target.value})}
+                className="flex-1 border border-zinc-200 rounded-xl p-2.5 text-sm font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white transition"
+                required
+              >
+                <option value="" disabled>-- Pilih Kelompok Tani --</option>
+                {farmerGroups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+              
+              <button
+                type="button"
+                onClick={onAddFarmerGroupClick}
+                title="Buat Kelompok Tani Baru"
+                className="p-3 bg-zinc-100 hover:bg-blue-50 border border-zinc-200 text-zinc-600 hover:text-blue-600 rounded-xl shadow-sm transition flex items-center justify-center"
+              >
+                <FaFolderPlus className="text-base" />
+              </button>
+            </div>
           </div>
         </div>
 

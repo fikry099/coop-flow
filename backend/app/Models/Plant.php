@@ -13,6 +13,10 @@ class Plant extends Model
         'land_id',
         'name',
         'planting_date',
+        'current_phase',
+        'last_fertilizer_type',
+        'last_fertilizer_amount',
+        'last_phase',
     ];
 
     // Relasi balik ke Lahan (Land)

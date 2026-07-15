@@ -52,20 +52,25 @@ Route::middleware('auth:sanctum')->group(function () {
     | Ekosistem Koperasi (Nested Group /cooperative)
     |--------------------------------------------------------------------------
     */
-    Route::prefix('cooperative')->group(function () {
-        
+        Route::prefix('cooperative')->group(function () {
+            
         // 1. Profil & Dashboard
         Route::put('/profile/complete', [CooperativeController::class, 'updateProfile']);
         Route::get('/dashboard', [CooperativeDashboardController::class, 'getKoperasiData']);
+        
+        // Resource untuk CRUD Pupuk (index, store, show, update, destroy)
         Route::apiResource('fertilizers', FertilizerController::class);
         
         // 2. Stok & Inventaris
         Route::prefix('inventory')->group(function () {
-            Route::get('/overview', [InventoryController::class, 'getOverview']);
+            // FertilizerController 
+            Route::get('/overview', [FertilizerController::class, 'getOverview']);
+            Route::post('/request-procurement-ml', [FertilizerController::class, 'requestProcurementAI']);
+            
             Route::get('/history', [InventoryController::class, 'getMutationHistory']);
             Route::post('/mutation', [InventoryController::class, 'storeMutation']);
-            Route::post('/request-procurement-ai', [InventoryController::class, 'requestProcurementAI']);
         });
+    
 
         // 3. Status Distribusi
         Route::prefix('distribution')->group(function () {
@@ -106,6 +111,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('farmers/{id}', [FarmerController::class, 'update']);
     Route::apiResource('farmers', FarmerController::class);
     Route::delete('/farmers/lands/{landId}', [FarmerController::class, 'destroyLand']);
+
+    Route::post('/farmers/lands/{landId}/fertilizer-recommendation', [FarmerController::class, 'getFertilizerRecommendation']);
     
     Route::post('/parcels', [ParcelController::class, 'store']);
     Route::apiResource('plants', PlantController::class);

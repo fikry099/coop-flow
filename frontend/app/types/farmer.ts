@@ -25,6 +25,10 @@ export interface Plant {
   land_id: number;
   name: string;
   planting_date: string;
+  current_phase?: string;          
+  last_fertilizer_type?: string;   
+  last_fertilizer_amount?: number;
+  last_phase?: string;
   created_at: string;
   updated_at: string;
 }

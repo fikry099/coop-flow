@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage; 
+use App\Services\FastApiService;
 
 class FarmerController extends Controller
 {
@@ -430,5 +431,67 @@ public function update(Request $request, $id)
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+/**
+     * Mengambil rekomendasi pupuk dari FastAPI berdasarkan data Lahan dan parameter tanaman terbaru
+     */
+    public function getFertilizerRecommendation(Request $request, $landId, FastApiService $fastApiService)
+    {
+        // 1. Load data lahan beserta tanaman terkait
+        $land = Land::with(['farmer', 'plants'])->find($landId);
+
+        if (!$land) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Lahan tidak ditemukan'
+            ], 404);
+        }
+
+        // 2. Ambil data tanaman paling pertama/terbaru di lahan tersebut
+        $latestPlant = $land->plants->first();
+
+        // Konversi luas lahan ke hektar
+        $areaInHectears = (float) $land->area;
+        if ($land->unit === 'Meter Persegi(m2)') {
+            $areaInHectears = $areaInHectears * 0.0001; 
+        }
+
+        // 3. Susun payload dengan memprioritaskan data database tanaman, disusul request, lalu fallback default
+        $payload = [
+            "luas_lahan_hektar"               => $areaInHectears,
+            "jenis_komoditas"                 => $request->input('jenis_komoditas', $latestPlant->name ?? 'Padi'), 
+            
+            "fase_tanam_saat_ini"             => $request->input('fase_tanam_saat_ini', $latestPlant->current_phase ?? 'Vegetatif'),
+            
+            "jenis_pupuk_input"               => $request->input('jenis_pupuk_input', $latestPlant->last_fertilizer_type ?? 'NPK'), 
+            
+            "jumlah_pupuk_fase_sebelumnya_kg" => (float) $request->input(
+                'jumlah_pupuk_fase_sebelumnya_kg', 
+                $latestPlant->last_fertilizer_amount ?? 0.0
+            ),
+            
+            "fase_tanam_sebelumnya"           => $request->input('fase_tanam_sebelumnya', $latestPlant->last_phase ?? 'Tidak Ada'),
+            
+            "curah_hujan_mm"                  => (float) ($land->average_monthly_precipitation ?? 150.0),
+            "suhu_rata_rata_celcius"          => (float) ($land->average_temperature ?? 27.0),
+            "kelembapan_persen"               => (int) ($land->average_humidity ?? 80),
+        ];
+
+        // 4. Kirim ke Python FastAPI
+        $result = $fastApiService->predictFertilizer($payload);
+
+        if (!$result) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mendapatkan prediksi dari Engine ML. Pastikan Service Engine ML berjalan.'
+            ], 502);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Rekomendasi pupuk berhasil dihitung!',
+            'data' => $result
+        ], 200);
     }
 }

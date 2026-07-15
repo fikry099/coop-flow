@@ -3,7 +3,6 @@
 namespace Database\Seeders;
 
 use App\Models\Cooperative;
-use App\Models\Warehouse;
 use App\Models\Fertilizer;
 use App\Models\InventoryMutation;
 use Illuminate\Database\Seeder;
@@ -13,7 +12,6 @@ class InventorySeeder extends Seeder
 {
     public function run(): void
     {
-        // 1. Buat Data Koperasi Induk Ter-aktivasi (Untuk simulasi yang sudah jalan)
         $cooperativeActive = Cooperative::create([
             'name'                   => 'Koperasi Desa Merah Putih Ranjeng',
             'cooperative_code'       => 'KDMP-3604-001',
@@ -25,7 +23,6 @@ class InventorySeeder extends Seeder
             'warehouse_capacity_ton' => 150
         ]);
 
-        // Buat Data Koperasi Sampel Belum Ter-aktivasi (Untuk Bahan Demo Dashboard Kemenko)
         Cooperative::create([
             'name'                   => 'Koperasi Desa Merah Putih Wonosari',
             'cooperative_code'       => 'KDMP-3439-002',
@@ -40,85 +37,69 @@ class InventorySeeder extends Seeder
             'is_profile_completed'   => false,
         ]);
 
-
-
-        $gudangPusat = Warehouse::create([
-            'cooperative_id' => $cooperativeActive->id, 
-            'name'           => 'Gudang Pusat Klaten',
-            'capacity_ton'   => 100,                    
-            'address'        => 'Jl. Pemuda No. 12, Klaten Tengah', 
-            'warehouse_type' => 'Gudang Utama',
-            'surface_area'   => 400,
-            'facilities'     => ['CCTV', 'Pallet', 'Timbangan Digital']
-        ]);
-
-        $gudangCabang = Warehouse::create([
-            'cooperative_id' => $cooperativeActive->id,
-            'name'           => 'Gudang Pembantu Cabang',
-            'capacity_ton'   => 50,
-            'address'        => 'Jl. Raya Lintas Desa No. 89, Ranjeng', 
-            'warehouse_type' => 'Gudang Pembantu',
-            'surface_area'   => 200,
-            'facilities'     => ['CCTV', 'Ventilasi']
-        ]);
-
-
         $dataPupuk = [
             [
                 'fertilizer_code'    => 'FPK-UREA',
-                'warehouse_id'       => $gudangPusat->id,
+                'cooperative_id'     => $cooperativeActive->id,
                 'name'               => 'Urea',
                 'current_stock_kg'   => 45250,
                 'minimum_stock_kg'   => 20000,
                 'price_per_kg'       => 2500, 
+                'status'             => 'tersedia',
             ],
             [
                 'fertilizer_code'    => 'FPK-NPK',
-                'warehouse_id'       => $gudangPusat->id,
+                'cooperative_id'     => $cooperativeActive->id,
                 'name'               => 'NPK',
                 'current_stock_kg'   => 38400,
                 'minimum_stock_kg'   => 15000,
                 'price_per_kg'       => 3000,
+                'status'             => 'tersedia',
             ],
             [
                 'fertilizer_code'    => 'FPK-ORGANIK',
-                'warehouse_id'       => $gudangPusat->id,
+                'cooperative_id'     => $cooperativeActive->id,
                 'name'               => 'Pupuk Organik',
                 'current_stock_kg'   => 12800,
                 'minimum_stock_kg'   => 10000,
                 'price_per_kg'       => 1500,
+                'status'             => 'tersedia',
             ],
             [
                 'fertilizer_code'    => 'FPK-SP36',
-                'warehouse_id'       => $gudangCabang->id, 
+                'cooperative_id'     => $cooperativeActive->id, 
                 'name'               => 'SP-36',
                 'current_stock_kg'   => 8500,
                 'minimum_stock_kg'   => 5000,
                 'price_per_kg'       => 2800,
+                'status'             => 'tersedia',
             ],
             [
                 'fertilizer_code'    => 'FPK-KCL',
-                'warehouse_id'       => $gudangCabang->id,
+                'cooperative_id'     => $cooperativeActive->id,
                 'name'               => 'KCl',
                 'current_stock_kg'   => 7000,
                 'minimum_stock_kg'   => 5000,
                 'price_per_kg'       => 4000,
+                'status'             => 'tersedia',
             ],
             [
                 'fertilizer_code'    => 'FPK-DOLOMIT',
-                'warehouse_id'       => $gudangCabang->id,
+                'cooperative_id'     => $cooperativeActive->id,
                 'name'               => 'Dolomit',
                 'current_stock_kg'   => 5500,
                 'minimum_stock_kg'   => 5000,
                 'price_per_kg'       => 1000,
+                'status'             => 'tersedia',
             ],
             [
                 'fertilizer_code'    => 'FPK-ZA',
-                'warehouse_id'       => $gudangCabang->id,
+                'cooperative_id'     => $cooperativeActive->id,
                 'name'               => 'ZA',
                 'current_stock_kg'   => 7000, 
                 'minimum_stock_kg'   => 10000,
                 'price_per_kg'       => 2200,
+                'status'             => 'menipis', 
             ],
         ];
 

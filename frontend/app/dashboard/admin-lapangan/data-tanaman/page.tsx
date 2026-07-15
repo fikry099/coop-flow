@@ -52,7 +52,17 @@ export default function DataTanamanPetaniPage() {
     setIsAdding(false);
   };
 
-  const handleSavePlant = async (newData: { land_id: number; plants: { name: string; planting_date: string }[] }) => {
+  const handleSavePlant = async (newData: { 
+    land_id: number; 
+    plants: { 
+      name: string; 
+      planting_date: string;
+      current_phase?: string;         
+      last_fertilizer_type?: string;  
+      last_fertilizer_amount?: number;
+      last_phase?: string;            
+    }[] 
+  }) => {
     if (!selectedFarmer) return;
     try {
       const response = await api.post('/plants', newData);
@@ -77,7 +87,19 @@ export default function DataTanamanPetaniPage() {
     }
   };
 
-  const handleUpdatePlant = async (plantId: string | number, updatedData: { name: string; planting_date: string; land_id: number }) => {
+
+const handleUpdatePlant = async (
+    plantId: string | number, 
+    updatedData: { 
+      name: string; 
+      planting_date: string; 
+      land_id: number;
+      current_phase?: string;           
+      last_fertilizer_type?: string;    
+      last_fertilizer_amount?: number;  
+      last_phase?: string;              
+    }
+  ) => {
     if (!selectedFarmer) return;
     try {
       const response = await api.put(`/plants/${plantId}`, updatedData);

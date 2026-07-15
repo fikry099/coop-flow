@@ -59,7 +59,7 @@ export default function Sidebar({ handleLogout, role, isOpen }: SidebarProps) {
       roles: ["petugas-koperasi"],
     },
     {
-      name: "Anggota",
+      name: "Data Petani",
       icon: HiUsers,
       href: "/dashboard/admin-koprasi/anggota",
       roles: ["petugas-koperasi"],
@@ -77,7 +77,7 @@ export default function Sidebar({ handleLogout, role, isOpen }: SidebarProps) {
       roles: ["petugas-koperasi"],
     },
     {
-      name: "Penyaluran",
+      name: "Penyaluran Pupuk",
       icon: HiCreditCard,
       href: "/dashboard/admin-koprasi/transaksi",
       roles: ["petugas-koperasi"],

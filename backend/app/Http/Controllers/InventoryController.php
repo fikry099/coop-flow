@@ -19,26 +19,40 @@ class InventoryController extends Controller
         $this->mlEngine = $mlEngine;
     }
 
-    public function getOverview(): JsonResponse
+    /**
+     * Get Overview Stok (Disesuaikan dengan skema tanpa tabel warehouses)
+     */
+    public function getOverview(Request $request): JsonResponse
     {
-        $fertilizers = Fertilizer::all()->map(function ($item) {
-            return [
-                'id'                => $item->id,
-                'fertilizer_code'   => $item->fertilizer_code,
-                'name'              => $item->name,
-                'current_stock_kg'  => $item->current_stock_kg,
-                'packaging_size_kg' => $item->packaging_size_kg ?? 50,
-                'price_per_kg'      => $item->price_per_kg,
-                'nilai_stok'        => $item->current_stock_kg * $item->price_per_kg,
-            ];
-        });
+        $cooperativeId = $request->user()->cooperative_id;
+        $fertilizers = Fertilizer::where('cooperative_id', $cooperativeId)
+            ->with('cooperative') 
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'id'                => $item->id,
+                    'fertilizer_code'   => $item->fertilizer_code,
+                    'name'              => $item->name,
+                    'image'             => $item->image, 
+                    'cooperative_name'  => $item->cooperative->name ?? '-', 
+                    'current_stock_kg'  => $item->current_stock_kg,
+                    'packaging_size_kg' => $item->packaging_size_kg ?? 50,
+                    'price_per_kg'      => $item->price_per_kg,
+                    'nilai_stok'        => $item->current_stock_kg * $item->price_per_kg,
+                    'status'            => $item->status, 
+                ];
+            });
 
         return response()->json([
             'success' => true, 
+            'message' => 'Ringkasan inventaris stok koperasi berhasil diambil.',
             'data'    => $fertilizers
         ], 200);
     }
 
+    /**
+     * Request Procurement AI (Logika bisnis aman, memastikan cooperative_id dinamis)
+     */
     public function requestProcurementAI(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
@@ -55,7 +69,6 @@ class InventoryController extends Controller
 
         $fertilizer = Fertilizer::findOrFail($request->fertilizer_id);
 
-        // Payload wajib disinkronkan dengan skema Pydantic Model2Request FastAPI
         $payloadML = [
             'jenis_pupuk' => $fertilizer->name,
             'bulan' => Carbon::now()->month,
@@ -66,7 +79,6 @@ class InventoryController extends Controller
             'asumsi_lead_time_hari' => (int)$request->asumsi_lead_time_hari
         ];
 
-        // Tembak microservice FastAPI via HTTP Client
         $responseAI = $this->mlEngine->predictProcurement($payloadML);
 
         if (!$responseAI || !isset($responseAI['suggested_procurement_kg'])) {
@@ -77,20 +89,19 @@ class InventoryController extends Controller
         $kemasanKg = $fertilizer->packaging_size_kg ?? 50;
         $jumlahKarung = ceil($suggestedKg / $kemasanKg); 
 
-        // Simpan ke workflow pengadaan
         $procurement = Procurement::create([
             'procurement_no' => 'PRC-' . time(),
             'cooperative_id' => $request->user()->cooperative_id ?? 1,
-            'fertilizer_id' => $fertilizer->id,
-            'quantity_bags' => $jumlahKarung,
-            'quantity_kg' => $suggestedKg,
-            'status' => 'menunggu_validasi',
+            'fertilizer_id'  => $fertilizer->id,
+            'quantity_bags'  => $jumlahKarung,
+            'quantity_kg'    => $suggestedKg,
+            'status'         => 'menunggu_validasi',
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Rekomendasi kuantitas pengadaan AI berhasil dihitung!',
-            'data' => $procurement
+            'data'    => $procurement
         ], 201);
     }
 }

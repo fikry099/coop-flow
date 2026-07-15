@@ -8,13 +8,19 @@ use Exception;
 
 class FastApiService
 {
-    protected string $baseUrl;
-    protected int $timeout;
+    protected string $baseUrl = '';
+    protected int $timeout = 30;
 
     public function __construct()
     {
-        $this->baseUrl = config('services.fastapi.base_url');
-        $this->timeout = config('services.fastapi.timeout');
+        $this->baseUrl = config('services.fastapi.base_url') ?? 'http://localhost:8080/api';
+        $this->timeout = (int) (config('services.fastapi.timeout') ?? 30);
+    }
+
+
+    public function predictProcurement(array $data): ?array
+    {
+        return $this->forecastStock($data);
     }
 
     /**

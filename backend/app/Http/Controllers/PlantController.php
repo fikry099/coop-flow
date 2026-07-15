@@ -20,6 +20,11 @@ class PlantController extends Controller
             'plants' => 'required|array|min:1',
             'plants.*.name' => 'required|string|max:255',
             'plants.*.planting_date' => 'required|date',
+
+            'plants.*.current_phase' => 'nullable|string|max:100',
+            'plants.*.last_fertilizer_type' => 'nullable|string|max:100',
+            'plants.*.last_fertilizer_amount' => 'nullable|numeric|min:0',
+            'plants.*.last_phase' => 'nullable|string|max:100',
         ]);
 
         if ($validator->fails()) {
@@ -41,7 +46,7 @@ class PlantController extends Controller
     }
 
     /**
-     * PUT/PATCH /api/plants/{plant}
+     * PUT/PATCH /api/plants/{id}
      * Memperbarui data varietas tanaman tunggal (Aksi Edit Per Kartu/Row)
      */
     public function update(Request $request, $id)
@@ -59,6 +64,12 @@ class PlantController extends Controller
             'name' => 'required|string|max:255',
             'planting_date' => 'required|date',
             'land_id' => 'sometimes|required|exists:lands,id',
+            
+            // Validasi field ML saat proses update/perubahan data tanaman
+            'current_phase' => 'nullable|string|max:100',
+            'last_fertilizer_type' => 'nullable|string|max:100',
+            'last_fertilizer_amount' => 'nullable|numeric|min:0',
+            'last_phase' => 'nullable|string|max:100',
         ]);
 
         if ($validator->fails()) {
@@ -69,7 +80,16 @@ class PlantController extends Controller
             ], 422);
         }
 
-        $plant->update($request->only(['name', 'planting_date', 'land_id']));
+        // Ambil semua kolom yang valid untuk disimpan ke database
+        $plant->update($request->only([
+            'name', 
+            'planting_date', 
+            'land_id',
+            'current_phase',
+            'last_fertilizer_type',
+            'last_fertilizer_amount',
+            'last_phase'
+        ]));
 
         return response()->json([
             'success' => true,
@@ -79,7 +99,7 @@ class PlantController extends Controller
     }
 
     /**
-     * DELETE /api/plants/{plant}
+     * DELETE /api/plants/{id}
      * Menghapus varietas tanaman tertentu berdasarkan ID Tanaman (Aksi Hapus Per Kartu)
      */
     public function destroy($id)

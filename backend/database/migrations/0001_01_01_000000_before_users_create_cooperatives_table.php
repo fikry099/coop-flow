@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('name'); 
             $table->string('cooperative_code')->unique();
             
-            // ➕ Tambahkan field legalitas & kontak baru di sini
+            // Legalitas & Kontak
             $table->string('nik_cooperative', 50)->unique()->nullable();
             $table->string('legal_entity_type')->nullable();
             $table->string('legal_entity_number')->nullable();
@@ -28,15 +28,18 @@ return new class extends Migration
             $table->string('phone_cooperative', 20)->nullable();
             $table->string('postal_code', 10)->nullable();
             
-            // Field Alamat Wilayah Regional
+            // Wilayah Regional
             $table->string('province')->nullable();
             $table->string('city_koor')->nullable();
             $table->string('district')->nullable();
             $table->string('village')->nullable();
-
             $table->decimal('latitude', 10, 8)->nullable(); 
             $table->decimal('longitude', 11, 8)->nullable();
+
+            // Integrasi Data Gudang Langsung ke Koperasi
+            $table->double('warehouse_surface_area')->nullable(); 
             $table->integer('warehouse_capacity_ton')->nullable();
+            $table->json('warehouse_facilities')->nullable(); 
 
             $table->boolean('is_activated')->default(false);
             $table->boolean('is_profile_completed')->default(false); 

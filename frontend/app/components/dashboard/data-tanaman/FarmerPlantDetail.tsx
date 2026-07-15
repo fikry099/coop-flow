@@ -7,10 +7,10 @@ import {
   FaSearch, 
   FaFilter, 
   FaChevronDown,
-  FaChartArea,       // Icon untuk Luas Lahan
-  FaFileContract,    // Icon untuk Status Lahan
-  FaMapMarkerAlt,    // Icon untuk Lokasi Utama
-  FaLayerGroup       // Icon untuk Jumlah Lahan
+  FaChartArea,      
+  FaFileContract,   
+  FaMapMarkerAlt,    
+  FaLayerGroup       
 } from 'react-icons/fa';
 import { Farmer, Plant } from '@/app/types/farmer'; 
 import AddPlantForm from './AddPlantForm';
@@ -20,10 +20,31 @@ interface FarmerPlantDetailProps {
   selectedFarmer: Farmer | null;
   isAdding: boolean;
   setIsAdding: (value: boolean) => void;
-  onSavePlant: (newData: { land_id: number; plants: { name: string; planting_date: string }[] }) => void;
+  onSavePlant: (newData: { 
+    land_id: number; 
+    plants: { 
+      name: string; 
+      planting_date: string;
+      current_phase?: string;
+      last_fertilizer_type?: string;
+      last_fertilizer_amount?: number;
+      last_phase?: string;
+    }[] 
+  }) => void;
   onDeletePlant: (plantId: string | number) => void;
   onDeleteAllPlantsInLand: (landId: number, plantIds: (string | number)[]) => void;
-  onUpdatePlant: (plantId: string | number, updatedData: { name: string; planting_date: string; land_id: number }) => void;
+  onUpdatePlant: (
+    plantId: string | number, 
+    updatedData: { 
+      name: string; 
+      planting_date: string; 
+      land_id: number;
+      current_phase?: string;
+      last_fertilizer_type?: string;
+      last_fertilizer_amount?: number;
+      last_phase?: string;
+    }
+  ) => void;
 }
 
 export default function FarmerPlantDetail({
@@ -39,6 +60,33 @@ export default function FarmerPlantDetail({
   const [editingPlant, setEditingPlant] = useState<(Plant & { land_id: number }) | null>(null);
   const [searchLocation, setSearchLocation] = useState('');
 
+  // ==========================================
+  // FUNGSI HANDLER DITEMPATKAN DI ATAS
+  // ==========================================
+  const handleEditClick = (plant: Plant, landId: number) => {
+    setEditingPlant({
+      id: plant.id,
+      name: plant.name,
+      planting_date: plant.planting_date,
+      current_phase: plant.current_phase,
+      last_fertilizer_type: plant.last_fertilizer_type,
+      last_fertilizer_amount: plant.last_fertilizer_amount,
+      last_phase: plant.last_phase,
+      created_at: plant.created_at,
+      updated_at: plant.updated_at,
+      land_id: landId
+    });
+    setIsAdding(true); 
+  };
+
+  const handleCancelForm = () => {
+    setIsAdding(false);
+    setEditingPlant(null);
+  };
+
+  // ==========================================
+  // EARLY RETURN JIKA PETANI BELUM DIPILIH
+  // ==========================================
   if (!selectedFarmer) {
     return (
       <div className="bg-white border border-dashed border-zinc-200 rounded-3xl p-12 text-center h-full flex flex-col items-center justify-center min-h-[400px] shadow-sm">
@@ -53,29 +101,15 @@ export default function FarmerPlantDetail({
     );
   }
 
-  const handleEditClick = (plant: Plant, landId: number) => {
-    setEditingPlant({
-      id: plant.id,
-      name: plant.name,
-      planting_date: plant.planting_date,
-      created_at: plant.created_at,
-      updated_at: plant.updated_at,
-      land_id: landId
-    });
-    setIsAdding(true); 
-  };
-
-  const handleCancelForm = () => {
-    setIsAdding(false);
-    setEditingPlant(null);
-  };
-
+  // ==========================================
+  // PROSES DAN DATA MANAGEMENT
+  // ==========================================
   const landList = selectedFarmer.lands || [];
 
-  // Meratakan (flatten) data dari semua lahan agar didapatkan satu list tanaman utuh beserta info lahannya
+  // Meratakan (flatten) data dari semua lahan beserta seluruh isi field tanaman
   const allPlants = landList.flatMap((land) => 
     (land.plants || []).map((plant) => ({
-      ...plant,
+      ...plant, // Menyertakan name, planting_date, current_phase, last_fertilizer_type, dll.
       land_id: land.id,
       land_name: land.land_name,
       land_area: land.area,
@@ -85,20 +119,20 @@ export default function FarmerPlantDetail({
     }))
   );
 
-  // Filter pencarian berdasarkan nama lokasi/lahan sesuai input box di Figma
+  // Filter pencarian berdasarkan nama lokasi/lahan
   const filteredPlants = allPlants.filter(p => 
     p.land_name?.toLowerCase().includes(searchLocation.toLowerCase()) ||
     p.location_address?.toLowerCase().includes(searchLocation.toLowerCase())
   );
 
-  // Hitung total akumulasi luas lahan dari seluruh lahan petani
-  const totalHectares = landList.reduce((acc, curr) => acc + (parseFloat(curr.area) || 0), 0);
+  // Hitung total akumulasi luas lahan
+  const totalHectears = landList.reduce((acc, curr) => acc + (parseFloat(curr.area) || 0), 0);
 
-  // Mengambil status lahan yang unik dari array lands
+  // Mengambil status lahan yang unik
   const landStatuses = Array.from(new Set(landList.map(land => land.status).filter(Boolean)));
   const displayStatus = landStatuses.length > 0 ? landStatuses.join(', ') : '-';
 
-  // Helper untuk memformat tanggal pendaftaran (created_at dari BE)
+  // Helper untuk memformat tanggal pendaftaran
   const formatRegistrationDate = (dateString?: string) => {
     if (!dateString) return { date: '-', time: '' };
     try {
@@ -116,7 +150,7 @@ export default function FarmerPlantDetail({
 
   return (
     <div className="space-y-4 w-full">
-      {/* 1. Header Profil Atas (Nama Petani, NIK, Kelompok, Tanggal) */}
+      {/* 1. Header Profil Atas */}
       <div className="bg-white p-6 rounded-2xl border border-zinc-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 bg-zinc-100 rounded-full flex items-center justify-center text-zinc-400 shrink-0">
@@ -145,7 +179,7 @@ export default function FarmerPlantDetail({
           </div>
           <div>
             <p className="text-[8px] text-zinc-400 font-bold uppercase">Total Luas Lahan</p>
-            <p className="text-xs font-bold text-zinc-600">{totalHectares} Hektar</p>
+            <p className="text-xs font-bold text-zinc-600">{totalHectears} Hektar</p>
           </div>
         </div>
 
@@ -207,8 +241,21 @@ export default function FarmerPlantDetail({
         />
       )}
 
-      {/* 3. Container Utama List Tanaman Sesuai Figma */}
+      {/* 3. Container Utama List Tanaman */}
       <div className="bg-white p-4 rounded-2xl border border-zinc-200 shadow-xs space-y-4">
+        {/* Input Pencarian Lahan */}
+        <div className="relative">
+          <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400 text-xs">
+            <FaSearch />
+          </span>
+          <input
+            type="text"
+            placeholder="Cari berdasarkan nama lahan atau alamat lokasi..."
+            value={searchLocation}
+            onChange={(e) => setSearchLocation(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 text-xs border border-zinc-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-zinc-50/50"
+          />
+        </div>
 
         {/* List Baris Tanaman Terintegrasi */}
         <div className="space-y-3">

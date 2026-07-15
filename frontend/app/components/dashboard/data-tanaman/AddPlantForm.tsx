@@ -2,20 +2,35 @@
 
 import React, { useState, useEffect } from 'react';
 import { FaPlus, FaTrash } from 'react-icons/fa';
-import { Land, Plant } from '@/app/dashboard/admin-lapangan/data-tanaman/page'; 
+import { Land, Plant } from '@/app/types/farmer'; 
 
+// Penyesuaian antarmuka input tanaman agar mencakup parameter pendukung ML yang lengkap
 interface PlantInput {
   name: string;
   planting_date: string;
+  current_phase?: string;
+  last_fertilizer_type?: string;
+  last_fertilizer_amount?: number;
+  last_phase?: string;
 }
 
 interface AddPlantFormProps {
   lands: Land[];
   onCancel: () => void;
   onSave: (data: { land_id: number; plants: PlantInput[] }) => void;
-  // TAMBAHKAN PROPS UNTUK MODE EDIT
   editingPlant?: (Plant & { land_id: number }) | null;
-  onUpdate?: (plantId: string | number, updatedData: { name: string; planting_date: string; land_id: number }) => void;
+  onUpdate?: (
+    plantId: string | number, 
+    updatedData: { 
+      name: string; 
+      planting_date: string; 
+      land_id: number;
+      current_phase?: string;
+      last_fertilizer_type?: string;
+      last_fertilizer_amount?: number;
+      last_phase?: string;
+    }
+  ) => void;
 }
 
 export default function AddPlantForm({ 
@@ -26,15 +41,21 @@ export default function AddPlantForm({
   onUpdate 
 }: AddPlantFormProps) {
   
-  // Deteksi jika komponen masuk dalam mode Edit
   const isEditMode = !!editingPlant;
 
   const [selectedLandId, setSelectedLandId] = useState<number>(lands[0]?.id || 0);
   const [landArea, setLandArea] = useState<string>(lands[0]?.area || '0');
 
-  // State utama berupa array baris tanaman
+  // Inisialisasi baris input utama dengan field parameter tanaman terlengkap
   const [plantRows, setPlantRows] = useState<PlantInput[]>([
-    { name: '', planting_date: new Date().toISOString().split('T')[0] }
+    { 
+      name: '', 
+      planting_date: new Date().toISOString().split('T')[0],
+      current_phase: '',
+      last_fertilizer_type: '',
+      last_fertilizer_amount: undefined,
+      last_phase: ''
+    }
   ]);
 
   // EFFECT 1: Mengisi data jika form dalam mode Edit
@@ -42,12 +63,27 @@ export default function AddPlantForm({
     if (isEditMode && editingPlant) {
       setSelectedLandId(editingPlant.land_id);
       setPlantRows([
-        { name: editingPlant.name, planting_date: editingPlant.planting_date }
+        { 
+          name: editingPlant.name, 
+          planting_date: editingPlant.planting_date,
+          current_phase: editingPlant.current_phase || '',
+          last_fertilizer_type: editingPlant.last_fertilizer_type || '',
+          last_fertilizer_amount: editingPlant.last_fertilizer_amount,
+          last_phase: editingPlant.last_phase || ''
+        }
       ]);
     } else {
-      // Reset ke default jika tiba-tiba keluar dari mode edit
       setSelectedLandId(lands[0]?.id || 0);
-      setPlantRows([{ name: '', planting_date: new Date().toISOString().split('T')[0] }]);
+      setPlantRows([
+        { 
+          name: '', 
+          planting_date: new Date().toISOString().split('T')[0],
+          current_phase: '',
+          last_fertilizer_type: '',
+          last_fertilizer_amount: undefined,
+          last_phase: ''
+        }
+      ]);
     }
   }, [editingPlant, isEditMode, lands]);
 
@@ -64,7 +100,14 @@ export default function AddPlantForm({
     if (isEditMode) return;
     setPlantRows([
       ...plantRows,
-      { name: '', planting_date: new Date().toISOString().split('T')[0] }
+      { 
+        name: '', 
+        planting_date: new Date().toISOString().split('T')[0],
+        current_phase: '',
+        last_fertilizer_type: '',
+        last_fertilizer_amount: undefined,
+        last_phase: '' 
+      }
     ]);
   };
 
@@ -74,10 +117,13 @@ export default function AddPlantForm({
     setPlantRows(plantRows.filter((_, i) => i !== index));
   };
 
-  // Fungsi memperbarui nilai input per baris
-  const handleInputChange = (index: number, field: keyof PlantInput, value: string) => {
+  // Fungsi memperbarui nilai input per baris secara dinamis
+  const handleInputChange = (index: number, field: keyof PlantInput, value: any) => {
     const updatedRows = [...plantRows];
-    updatedRows[index][field] = value;
+    updatedRows[index] = {
+      ...updatedRows[index],
+      [field]: value === '' ? undefined : value
+    };
     setPlantRows(updatedRows);
   };
 
@@ -86,17 +132,25 @@ export default function AddPlantForm({
     if (!selectedLandId) return;
 
     if (isEditMode && editingPlant && onUpdate) {
-      // Jalankan fungsi update jika sedang dalam mode edit
       onUpdate(editingPlant.id, {
         name: plantRows[0].name,
         planting_date: plantRows[0].planting_date,
-        land_id: Number(selectedLandId)
+        land_id: Number(selectedLandId),
+        current_phase: plantRows[0].current_phase,
+        last_fertilizer_type: plantRows[0].last_fertilizer_type,
+        last_fertilizer_amount: plantRows[0].last_fertilizer_amount ? Number(plantRows[0].last_fertilizer_amount) : undefined,
+        last_phase: plantRows[0].last_phase
       });
     } else {
-      // Jalankan fungsi create massal jika mode tambah baru
+      // Normalisasi jumlah pemupukan sebelum dikirim ke onSave
+      const formattedPlants = plantRows.map(row => ({
+        ...row,
+        last_fertilizer_amount: row.last_fertilizer_amount ? Number(row.last_fertilizer_amount) : undefined
+      }));
+
       onSave({
         land_id: Number(selectedLandId),
-        plants: plantRows
+        plants: formattedPlants
       });
     }
   };
@@ -105,7 +159,7 @@ export default function AddPlantForm({
     <div className={`bg-white p-6 rounded-2xl border shadow-md space-y-4 animate-in fade-in duration-200 ${isEditMode ? 'border-amber-500' : 'border-emerald-500'}`}>
       <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
         <h3 className="text-sm font-bold text-zinc-800">
-          {isEditMode ? 'Edit Informasi Varietas Tanaman' : 'Tambah Varietas Tanaman Baru pada Lahan'}
+          {isEditMode ? 'Edit Informasi Varietas & Indikator Tanaman' : 'Tambah Varietas Tanaman Baru pada Lahan'}
         </h3>
         <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg ${isEditMode ? 'text-amber-600 bg-amber-50' : 'text-emerald-600 bg-emerald-50'}`}>
           {isEditMode ? 'Mode Edit Data' : 'Mendukung Banyak Varietas Sekaligus'}
@@ -120,7 +174,7 @@ export default function AddPlantForm({
             <select
               value={selectedLandId}
               onChange={(e) => setSelectedLandId(Number(e.target.value))}
-              disabled={isEditMode} // Kunci perpindahan lahan saat edit jika struktur API Anda mengikat tanaman pada lahan saat itu
+              disabled={isEditMode}
               className="w-full border border-zinc-200 rounded-xl p-2.5 text-sm font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {lands.map((land) => (
@@ -144,62 +198,110 @@ export default function AddPlantForm({
         </div>
 
         {/* INPUT DINAMIS PER BARIS TANAMAN */}
-        <div className="space-y-3">
+        <div className="space-y-4">
           <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider">
-            {isEditMode ? 'Data Komoditas / Varietas' : 'Daftar Komoditas / Varietas Tanam'}
+            {isEditMode ? 'Data Komoditas / Informasi Agrikultur' : 'Daftar Komoditas / Varietas Tanam'}
           </label>
           
           {plantRows.map((row, index) => (
             <div 
               key={index} 
-              className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end p-3 bg-white border border-zinc-200 rounded-xl shadow-sm relative group"
+              className="p-4 bg-white border border-zinc-200 rounded-xl shadow-sm space-y-3 relative group"
             >
-              {/* INPUT NAMA VARIETAS */}
-              <div className={isEditMode ? "sm:col-span-7" : "sm:col-span-6"}>
-                <label className="block text-[10px] font-bold text-zinc-400 mb-1">
-                  Nama Varietas / Jenis Tanaman {isEditMode ? '' : `(#${index + 1})`}
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Padi Ciherang, Cabai Rawit"
-                  value={row.name}
-                  onChange={(e) => handleInputChange(index, 'name', e.target.value)}
-                  className="w-full border border-zinc-200 rounded-xl p-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-
-              {/* TANGGAL TANAM */}
-              <div className="sm:col-span-5">
-                <label className="block text-[10px] font-bold text-zinc-400 mb-1">Tanggal Tanam</label>
-                <input
-                  type="date"
-                  required
-                  value={row.planting_date}
-                  onChange={(e) => handleInputChange(index, 'planting_date', e.target.value)}
-                  className="w-full border border-zinc-200 rounded-xl p-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-
-              {/* TOMBOL HAPUS BARIS (Sembunyikan saat mode edit) */}
-              {!isEditMode && (
-                <div className="sm:col-span-1 flex justify-center pb-0.5">
-                  <button
-                    type="button"
-                    disabled={plantRows.length === 1}
-                    onClick={() => handleRemoveRow(index)}
-                    className="p-2.5 text-zinc-400 hover:text-rose-600 border border-zinc-100 hover:border-rose-200 rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed w-full flex justify-center items-center"
-                    title="Hapus baris ini"
-                  >
-                    <FaTrash className="text-xs" />
-                  </button>
+              {/* Baris Utama: Nama & Tanggal Tanam */}
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                <div className={isEditMode ? "sm:col-span-7" : "sm:col-span-6"}>
+                  <label className="block text-[10px] font-bold text-zinc-400 mb-1">
+                    Nama Varietas / Jenis Tanaman {isEditMode ? '' : `(#${index + 1})`}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: Padi Ciherang, Cabai Rawit"
+                    value={row.name}
+                    onChange={(e) => handleInputChange(index, 'name', e.target.value)}
+                    className="w-full border border-zinc-200 rounded-xl p-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
                 </div>
-              )}
+
+                <div className="sm:col-span-5">
+                  <label className="block text-[10px] font-bold text-zinc-400 mb-1">Tanggal Tanam</label>
+                  <input
+                    type="date"
+                    required
+                    value={row.planting_date}
+                    onChange={(e) => handleInputChange(index, 'planting_date', e.target.value)}
+                    className="w-full border border-zinc-200 rounded-xl p-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                {!isEditMode && (
+                  <div className="sm:col-span-1 flex justify-center pb-0.5">
+                    <button
+                      type="button"
+                      disabled={plantRows.length === 1}
+                      onClick={() => handleRemoveRow(index)}
+                      className="p-2.5 text-zinc-400 hover:text-rose-600 border border-zinc-100 hover:border-rose-200 rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed w-full flex justify-center items-center"
+                      title="Hapus baris ini"
+                    >
+                      <FaTrash className="text-xs" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Baris Tambahan: Informasi Tambahan Komoditas (Fase & Pemupukan) */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-dashed border-zinc-100">
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-400 mb-1">Fase Saat Ini</label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Vegetatif"
+                    value={row.current_phase || ''}
+                    onChange={(e) => handleInputChange(index, 'current_phase', e.target.value)}
+                    className="w-full border border-zinc-200 rounded-xl p-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-zinc-50/30"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-400 mb-1">Fase Sebelumnya</label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Persemaian"
+                    value={row.last_phase || ''}
+                    onChange={(e) => handleInputChange(index, 'last_phase', e.target.value)}
+                    className="w-full border border-zinc-200 rounded-xl p-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-zinc-50/30"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-400 mb-1">Jenis Pupuk Terakhir</label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: NPK Mutiara"
+                    value={row.last_fertilizer_type || ''}
+                    onChange={(e) => handleInputChange(index, 'last_fertilizer_type', e.target.value)}
+                    className="w-full border border-zinc-200 rounded-xl p-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-zinc-50/30"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-400 mb-1">Jumlah Pupuk (Kg)</label>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="Contoh: 25"
+                    value={row.last_fertilizer_amount ?? ''}
+                    onChange={(e) => handleInputChange(index, 'last_fertilizer_amount', e.target.value)}
+                    className="w-full border border-zinc-200 rounded-xl p-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-zinc-50/30"
+                  />
+                </div>
+              </div>
             </div>
           ))}
         </div>
 
-        {/* BUTTON TAMBAH BARIS (Sembunyikan saat mode edit) */}
+        {/* BUTTON TAMBAH BARIS */}
         {!isEditMode && (
           <button
             type="button"

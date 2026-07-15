@@ -5,12 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class Fertilizer extends Model
 {
     protected $fillable = [
         'fertilizer_code', 
-        'warehouse_id', 
+        'cooperative_id', 
         'name', 
         'image',
         'packaging_size_kg', 
@@ -20,9 +21,27 @@ class Fertilizer extends Model
         'status'
     ];
 
-    public function warehouse(): BelongsTo
+    protected static function booted()
     {
-        return $this->belongsTo(Warehouse::class);
+        static::creating(function ($fertilizer) {
+            // 1. Ambil ID berikutnya
+            $nextId = (static::max('id') ?? 0) + 1;
+
+            // 2. Bersihkan nama pupuk (UPPERCASE dan tanpa spasi)
+            $cleanName = Str::upper(str_replace(' ', '', $fertilizer->name));
+
+            // 3. Ambil tanggal hari ini (DDMMYY)
+            $date = date('dmy');
+
+            // 4. Gabungkan menjadi kode: NAMA-ID-TANGGAL
+            $fertilizer->fertilizer_code = "{$cleanName}-{$nextId}-{$date}";
+        });
+    }
+
+
+    public function cooperative(): BelongsTo
+    {
+        return $this->belongsTo(Cooperative::class);
     }
 
     public function mutations(): HasMany

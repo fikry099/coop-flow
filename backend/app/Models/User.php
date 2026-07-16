@@ -33,7 +33,6 @@ protected $guard_name = 'api';
     {
         return $this->belongsTo(Cooperative::class);
     }
-
     /**
      * Hubungan lama Anda tetap dipertahankan jika diperlukan
      */

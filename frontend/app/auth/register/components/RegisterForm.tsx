@@ -1,9 +1,12 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation"; // <-- IMPORT ROUTER
 import { Eye, EyeOff } from "lucide-react";
 import api from "../../../lib/axios";
+import Swal from "sweetalert2"; // <-- IMPORT SWEETALERT2
 
 export default function RegisterForm() {
+  const router = useRouter(); // <-- INISIALISASI ROUTER
   const [loading, setLoading] = useState(false);
   const [provinces, setProvinces] = useState([]);
   const [cities, setCities] = useState([]);
@@ -32,6 +35,21 @@ export default function RegisterForm() {
     capacity_ton: "",
     password: "",
     password_confirmation: "",
+  });
+
+  // ==========================================
+  // KONFIGURASI TOAST SWEETALERT2 (Sama dengan Login)
+  // ==========================================
+  const Toast = Swal.mixin({
+    toast: true,
+    position: "top-end",
+    showConfirmButton: false,
+    timer: 3500, // Diberi waktu sedikit lebih lama agar user sempat membaca pesan sukses verifikasi
+    timerProgressBar: true,
+    didOpen: (toast) => {
+      toast.addEventListener("mouseenter", Swal.stopTimer);
+      toast.addEventListener("mouseleave", Swal.resumeTimer);
+    },
   });
 
   useEffect(() => {
@@ -90,7 +108,6 @@ export default function RegisterForm() {
     }
   };
 
-  // Generate kode koperasi otomatis, tidak perlu diisi manual oleh user
   const generateCooperativeCode = (name: string) => {
     const initials = name
       .trim()
@@ -108,13 +125,18 @@ export default function RegisterForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validasi Password menggunakan Toast
     if (formData.password !== formData.password_confirmation) {
-      alert("Password tidak sama!");
+      Toast.fire({
+        icon: "warning",
+        title: "Konfirmasi password tidak cocok!",
+      });
       return;
     }
+
     setLoading(true);
 
-    // Cari nama wilayah berdasarkan code yang dipilih
     const provinceName =
       provinces.find((p: any) => p.code === formData.province_id)?.name || "";
     const cityName =
@@ -145,13 +167,34 @@ export default function RegisterForm() {
     };
 
     try {
-      await api.post("/cooperative/register", payload);
-      alert("Registrasi Berhasil!");
+      const response = await api.post("/cooperative/register", payload);
+
+      // Mengambil pesan sukses dari backend jika ada
+      const successMessage =
+        response.data?.message || "Registrasi Koperasi sukses diajukan!";
+
+      // Tampilkan Toast Sukses
+      Toast.fire({
+        icon: "success",
+        title: successMessage,
+      });
+
+      // Redirect ke Halaman Login setelah sukses
+      router.push("/auth/login");
     } catch (err: any) {
       console.error("Full response data:", err.response?.data);
-      alert(
-        err.response?.data?.message || "Gagal registrasi, periksa input data.",
-      );
+
+      let errorMsg = "Gagal registrasi, periksa kembali input data.";
+      if (err.response && err.response.data) {
+        // Ambil pesan error spesifik dari backend Laravel
+        errorMsg = err.response.data.message || errorMsg;
+      }
+
+      // Tampilkan Toast Error
+      Toast.fire({
+        icon: "error",
+        title: errorMsg,
+      });
     } finally {
       setLoading(false);
     }
@@ -180,9 +223,9 @@ export default function RegisterForm() {
   };
 
   const inputClass =
-    "border border-gray-300 p-3.5 rounded-lg w-full text-base placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500";
+    "border border-gray-300 p-3.5 rounded-lg w-full text-base text-black placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500";
   const labelClass = "block text-base font-semibold mb-2 text-gray-700";
-  
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Nama Koperasi & NIK */}

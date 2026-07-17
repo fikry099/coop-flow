@@ -169,4 +169,30 @@ class CooperativeRegistrationController extends Controller
             'message' => 'Pengajuan pendaftaran Koperasi resmi ditolak.'
         ], 200);
     }
+
+    // Tambahkan method ini di dalam CooperativeRegistrationController
+
+public function getActiveRegistrations()
+{
+    try {
+        // Ambil data user admin koperasi yang statusnya sudah ACTIVE
+        // Sertakan relasi 'cooperative' agar data provinsi/kota terbaca di frontend
+        $activeRegistrations = User::where('status', 'ACTIVE')
+            ->with('cooperative') 
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Berhasil mengambil data koperasi aktif',
+            'data' => $activeRegistrations
+        ], 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Gagal mengambil data: ' . $e->getMessage()
+        ], 500);
+    }
+}
 }

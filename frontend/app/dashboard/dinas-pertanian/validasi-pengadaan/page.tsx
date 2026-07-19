@@ -48,7 +48,7 @@ export default function ValidasiPengadaanPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-3">
+      <div className="flex flex-col items-center justify-center min-h-100 space-y-3">
         <div className="animate-spin rounded-full h-9 w-9 border-b-2 border-emerald-600" />
         <span className="text-xs font-bold text-zinc-400 tracking-wider uppercase">Sinkronisasi Dokumen...</span>
       </div>

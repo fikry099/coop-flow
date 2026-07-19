@@ -28,20 +28,28 @@ class ProcurementOrderController extends Controller
     {
         $user = $request->user();
         
-        // PERBAIKAN: Menggunakan 'province' dan 'city_koor' sesuai skema tabel cooperatives Anda
+        // Menggunakan 'province' dan 'city_koor' sesuai skema tabel cooperatives Anda
         $query = ProcurementOrder::with(['cooperative:id,name,province,city_koor']);
 
         /**
          * KONTROL AKSES OTOMATIS BERDASARKAN ROLE USER
          * 1. Jika Petugas Koperasi: Hanya melihat PO miliknya sendiri
          * 2. Jika Dinas Pertanian: Melihat PO dari koperasi yang kota/kabupatennya cocok
+         * 3. Jika Kemenko: Hanya melihat PO yang sudah lolos validasi Dinas Pertanian
          */
         if ($user->hasRole('petugas-koperasi') || isset($user->cooperative_id)) {
             $query->where('cooperative_id', $user->cooperative_id);
         } elseif ($user->hasRole('dinas-pertanian')) {
             $query->whereHas('cooperative', function ($q) use ($user) {
-                $q->whereRaw('LOWER(city_koor) = ?', [strtolower($user->kabupaten)]);
+                // PERBAIKAN: Menggunakan $user->city_code sesuai dengan tabel users yang baru
+                $q->whereRaw('LOWER(city_koor) = ?', [strtolower($user->city_code)]);
             });
+        } elseif ($user->hasRole('kemenko')) {
+            $query->whereIn('status_verifikasi', [
+                'PENDING_KEMENKO',
+                'APPROVED',
+                'REJECTED_KEMENKO',
+            ]);
         }
 
         // Urutkan berdasarkan PO terbaru yang diajukan
@@ -410,7 +418,7 @@ class ProcurementOrderController extends Controller
         $a = sin($dLat / 2) * sin($dLat / 2) +
              cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
              sin($dLon / 2) * sin($dLon / 2);
-             
+
         $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
         
         return $earthRadius * $c;

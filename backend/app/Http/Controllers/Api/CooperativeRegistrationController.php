@@ -82,7 +82,11 @@ public function register(Request $request)
             'password'       => Hash::make($request->password),
             'phone'          => $request->phone_cooperative,
             'cooperative_id' => $cooperative->id,
-            'status'         => 'PENDING'
+            'status'         => 'PENDING',
+            'province_code'  => $request->province,
+            'city_code'      => $request->city_koor,
+            'district_code'  => $request->district,
+            'village_code'   => $request->village,
         ]);
 
         $user->assignRole('petugas-koperasi');

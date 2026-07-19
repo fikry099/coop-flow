@@ -21,6 +21,11 @@ return new class extends Migration
             $table->string('phone')->nullable()->unique(); 
             $table->text('address')->nullable();        
             
+            $table->string('province_code')->nullable();
+            $table->string('city_code')->nullable();
+            $table->string('district_code')->nullable();
+            $table->string('village_code')->nullable();
+            
             $table->foreignId('cooperative_id')
                   ->nullable()
                   ->constrained('cooperatives')

@@ -1,43 +1,63 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import api from '@/app/lib/axios'; 
-import ProcurementOverview from '@/app/components/dashboard/admin-koperasi/procurement/ProcurementOverview';
-import ProcurementTable from '@/app/components/dashboard/admin-koperasi/procurement/ProcurementTable';
-import ProcurementTracker from '@/app/components/dashboard/admin-koperasi/procurement/ProcurementTracker'; 
-import DistributionSummaryCard from '@/app/components/dashboard/admin-koperasi/procurement/DistributionSummaryCard';
-import DistributionBanner from '@/app/components/dashboard/admin-koperasi/procurement/DistributionBanner';
-import { FaSearch, FaFilter } from 'react-icons/fa';
+import React, { useState, useEffect } from "react";
+import api from "@/app/lib/axios";
+import ProcurementOverview from "@/app/components/dashboard/admin-koperasi/procurement/ProcurementOverview";
+import ProcurementTable from "@/app/components/dashboard/admin-koperasi/procurement/ProcurementTable";
+import ProcurementTracker from "@/app/components/dashboard/admin-koperasi/procurement/ProcurementTracker";
+import DistributionSummaryCard from "@/app/components/dashboard/admin-koperasi/procurement/DistributionSummaryCard";
+import DistributionBanner from "@/app/components/dashboard/admin-koperasi/procurement/DistributionBanner";
+import { FaSearch, FaFilter } from "react-icons/fa";
+import Swal from "sweetalert2";
+
+// Konfigurasi reusable untuk Toast SweetAlert2 kanan atas (konsisten dengan AiProcurementPanel)
+const Toast = Swal.mixin({
+  toast: true,
+  position: "top-end",
+  showConfirmButton: false,
+  timer: 4000,
+  timerProgressBar: true,
+  didOpen: (toast) => {
+    toast.onmouseenter = Swal.stopTimer;
+    toast.onmouseleave = Swal.resumeTimer;
+  },
+});
 
 export default function StatusDistribusiPage() {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingDetail, setLoadingDetail] = useState<boolean>(false);
-  const [search, setSearch] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<string>('Semua');
+  const [search, setSearch] = useState<string>("");
+  const [activeTab, setActiveTab] = useState<string>("Semua");
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
-  const [currentPeriod, setCurrentPeriod] = useState<string>('');
+  const [currentPeriod, setCurrentPeriod] = useState<string>("");
 
   // 1. FETCH ALL ORDERS
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/cooperative/procurement');
+      const response = await api.get("/cooperative/procurement");
       if (response.data.success) {
         const data = response.data.data;
         setOrders(data);
-        
+
         if (data.length > 0) {
           const latestOrder = data[0];
           if (latestOrder.periode_pengadaan) {
             setCurrentPeriod(latestOrder.periode_pengadaan);
           } else if (latestOrder.created_at) {
             const date = new Date(latestOrder.created_at);
-            const formatted = date.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+            const formatted = date.toLocaleDateString("id-ID", {
+              month: "long",
+              year: "numeric",
+            });
             setCurrentPeriod(formatted);
           }
         } else {
-          const dynamicFallback = new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+          const dynamicFallback = new Date().toLocaleDateString("id-ID", {
+            month: "long",
+            year: "numeric",
+          });
           setCurrentPeriod(dynamicFallback);
         }
       }
@@ -58,7 +78,10 @@ export default function StatusDistribusiPage() {
       }
     } catch (error) {
       console.error("Gagal mengambil detail pengadaan:", error);
-      alert("Gagal memuat detail order.");
+      Toast.fire({
+        icon: "error",
+        title: "Gagal memuat detail order.",
+      });
     } finally {
       setLoadingDetail(false);
     }
@@ -69,44 +92,111 @@ export default function StatusDistribusiPage() {
   }, []);
 
   const handleCompleteOrder = async (id: number) => {
-    if (!confirm("Apakah Anda yakin fisik pupuk sudah dibongkar total di gudang koperasi?")) return;
+    const confirmResult = await Swal.fire({
+      title: "Konfirmasi Penerimaan Fisik",
+      text: "Apakah Anda yakin fisik pupuk sudah dibongkar total di gudang koperasi? Stok akan otomatis bertambah setelah ini.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Ya, Sudah Diterima",
+      cancelButtonText: "Batal",
+      confirmButtonColor: "#059669", // emerald-600
+      cancelButtonColor: "#a1a1aa", // zinc-400
+      reverseButtons: true,
+    });
+
+    if (!confirmResult.isConfirmed) return;
+
     try {
-      const response = await api.post(`/cooperative/procurement/${id}/complete`);
+      const response = await api.post(
+        `/cooperative/procurement/${id}/complete`,
+      );
       if (response.data.success) {
-        alert(response.data.message);
+        Toast.fire({
+          icon: "success",
+          title: "Berhasil!",
+          text: response.data.message,
+        });
         fetchOrderDetail(id);
         fetchOrders();
       }
     } catch (err: any) {
-      alert("Gagal memperbarui status pengiriman.");
+      Toast.fire({
+        icon: "error",
+        title: "Gagal",
+        text:
+          err.response?.data?.message || "Gagal memperbarui status pengiriman.",
+      });
     }
   };
 
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.po_number.toLowerCase().includes(search.toLowerCase()) ||
-                          order.periode_pengadaan.toLowerCase().includes(search.toLowerCase());
-    if (activeTab === 'Disetujui') return matchesSearch && (['APPROVED', 'SELESAI'].includes(order.status_verifikasi) || order.status_logistik !== 'NONE');
-    if (activeTab === 'Ditolak') return matchesSearch && ['REJECTED_DINAS', 'REJECTED_KEMENKO'].includes(order.status_verifikasi);
+  const filteredOrders = orders.filter((order) => {
+    const matchesSearch =
+      order.po_number.toLowerCase().includes(search.toLowerCase()) ||
+      order.periode_pengadaan.toLowerCase().includes(search.toLowerCase());
+    if (activeTab === "Disetujui")
+      return (
+        matchesSearch &&
+        (["APPROVED", "SELESAI"].includes(order.status_verifikasi) ||
+          order.status_logistik !== "NONE")
+      );
+    if (activeTab === "Ditolak")
+      return (
+        matchesSearch &&
+        ["REJECTED_DINAS", "REJECTED_KEMENKO"].includes(order.status_verifikasi)
+      );
     return matchesSearch;
   });
 
   const totalPengajuan = orders.length;
-  const totalJenisPupuk = orders.reduce((acc, curr) => acc + (curr.total_items || 0), 0);
-  const disetujuiCount = orders.filter(o => o.status_verifikasi === 'APPROVED' || o.status_logistik === 'SELESAI').length;
-  const menungguCount = orders.filter(o => ['PENDING_DINAS', 'PENDING_KEMENKO'].includes(o.status_verifikasi)).length;
-  const ditolakCount = orders.filter(o => ['REJECTED_DINAS', 'REJECTED_KEMENKO'].includes(o.status_verifikasi)).length;
+  const totalJenisPupuk = orders.reduce(
+    (acc, curr) => acc + (curr.total_items || 0),
+    0,
+  );
+  const disetujuiCount = orders.filter(
+    (o) =>
+      o.status_verifikasi === "APPROVED" || o.status_logistik === "SELESAI",
+  ).length;
+  const menungguCount = orders.filter((o) =>
+    ["PENDING_DINAS", "PENDING_KEMENKO"].includes(o.status_verifikasi),
+  ).length;
+  const ditolakCount = orders.filter((o) =>
+    ["REJECTED_DINAS", "REJECTED_KEMENKO"].includes(o.status_verifikasi),
+  ).length;
 
-  const realOrdersCompleted = orders.filter(o => ['APPROVED', 'SELESAI'].includes(o.status_verifikasi) || o.status_logistik === 'SELESAI');
-  const totalKgTersalurkan = realOrdersCompleted.reduce((acc, curr) => acc + (Number(curr.total_weight_kg) || 0), 0);
-  const totalBagsTersalurkan = realOrdersCompleted.reduce((acc, curr) => acc + (Number(curr.total_bags_ordered) || 0), 0);
+  const realOrdersCompleted = orders.filter(
+    (o) =>
+      ["APPROVED", "SELESAI"].includes(o.status_verifikasi) ||
+      o.status_logistik === "SELESAI",
+  );
+  const totalKgTersalurkan = realOrdersCompleted.reduce(
+    (acc, curr) => acc + (Number(curr.total_weight_kg) || 0),
+    0,
+  );
+  const totalBagsTersalurkan = realOrdersCompleted.reduce(
+    (acc, curr) => acc + (Number(curr.total_bags_ordered) || 0),
+    0,
+  );
   const totalTonTersalurkan = (totalKgTersalurkan / 1000).toFixed(1);
 
   const generateChartData = () => {
     const monthsMap: { [key: string]: number } = {};
-    const namaBulan = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Juni', 'Juli', 'Agt', 'Sept', 'Okt', 'Nov', 'Des'];
+    const namaBulan = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "Mei",
+      "Juni",
+      "Juli",
+      "Agt",
+      "Sept",
+      "Okt",
+      "Nov",
+      "Des",
+    ];
     const sortedOrders = [...orders].reverse();
 
-    sortedOrders.forEach(order => {
+    sortedOrders.forEach((order) => {
       if (order.created_at) {
         const date = new Date(order.created_at);
         const monthName = namaBulan[date.getMonth()];
@@ -115,12 +205,12 @@ export default function StatusDistribusiPage() {
       }
     });
 
-    const formattedData = Object.keys(monthsMap).map(month => ({
+    const formattedData = Object.keys(monthsMap).map((month) => ({
       name: month,
-      ton: parseFloat(monthsMap[month].toFixed(1))
+      ton: parseFloat(monthsMap[month].toFixed(1)),
     }));
 
-    return formattedData.length > 0 ? formattedData : [{ name: '-', ton: 0 }];
+    return formattedData.length > 0 ? formattedData : [{ name: "-", ton: 0 }];
   };
 
   return (
@@ -128,10 +218,15 @@ export default function StatusDistribusiPage() {
       {/* Header Utama */}
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-xl font-bold text-[#115e59] tracking-tight">Distribusi Pupuk</h1>
-          <p className="text-xs text-zinc-500 font-medium mt-1">Kelola pengiriman dan penyaluran pupuk dari koperasi ke Dinas Pertanian</p>
+          <h1 className="text-xl font-bold text-[#115e59] tracking-tight">
+            Distribusi Pupuk
+          </h1>
+          <p className="text-xs text-zinc-500 font-medium mt-1">
+            Kelola pengiriman dan penyaluran pupuk dari koperasi ke Dinas
+            Pertanian
+          </p>
         </div>
-        
+
         {/* Badge Periode Skeleton */}
         {loading ? (
           <div className="w-32 h-7 bg-zinc-200 animate-pulse rounded-xl" />
@@ -147,7 +242,10 @@ export default function StatusDistribusiPage() {
       {loading ? (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="p-4 bg-white border border-zinc-100 rounded-xl space-y-3 shadow-sm animate-pulse">
+            <div
+              key={i}
+              className="p-4 bg-white border border-zinc-100 rounded-xl space-y-3 shadow-sm animate-pulse"
+            >
               <div className="w-8 h-8 bg-zinc-200 rounded-lg" />
               <div className="h-3 bg-zinc-200 rounded w-2/3" />
               <div className="h-6 bg-zinc-200 rounded w-1/2" />
@@ -155,7 +253,7 @@ export default function StatusDistribusiPage() {
           ))}
         </div>
       ) : (
-        <ProcurementOverview 
+        <ProcurementOverview
           totalPengajuan={totalPengajuan}
           totalJenisPupuk={totalJenisPupuk}
           disetujuiCount={disetujuiCount}
@@ -166,8 +264,14 @@ export default function StatusDistribusiPage() {
 
       {/* Visualisasi Sistem Horizontal Terbuka */}
       {selectedOrder && (
-        <div className={loadingDetail ? 'opacity-50 pointer-events-none transition-opacity' : ''}>
-          <ProcurementTracker 
+        <div
+          className={
+            loadingDetail
+              ? "opacity-50 pointer-events-none transition-opacity"
+              : ""
+          }
+        >
+          <ProcurementTracker
             order={selectedOrder}
             onClose={() => setSelectedOrder(null)}
             onCompleteOrder={handleCompleteOrder}
@@ -194,32 +298,31 @@ export default function StatusDistribusiPage() {
 
       {/* Konten Split Grid Bawah */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        
         {/* Sisi Kiri: Tabs + Tabel Utama */}
         <div className="lg:col-span-2 space-y-4">
           <div className="border-b border-zinc-100 flex gap-6 text-sm font-semibold">
-            {['Semua', 'Disetujui', 'Ditolak'].map((tab) => (
+            {["Semua", "Disetujui", "Ditolak"].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`pb-3 border-b-2 transition-all ${activeTab === tab ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-zinc-400 hover:text-zinc-600'}`}
+                className={`pb-3 border-b-2 transition-all ${activeTab === tab ? "border-emerald-600 text-emerald-600" : "border-transparent text-zinc-400 hover:text-zinc-600"}`}
               >
                 {tab}
               </button>
             ))}
           </div>
 
-          <ProcurementTable 
+          <ProcurementTable
             loading={loading}
             loadingDetail={loadingDetail}
             orders={filteredOrders}
             selectedOrderId={selectedOrder?.id || null}
-            selectedOrderData={selectedOrder} 
+            selectedOrderData={selectedOrder}
             onSelectOrder={(order) => {
               if (selectedOrder?.id === order.id) {
                 setSelectedOrder(null);
               } else {
-                fetchOrderDetail(order.id); 
+                fetchOrderDetail(order.id);
               }
             }}
           />
@@ -249,7 +352,7 @@ export default function StatusDistribusiPage() {
               </div>
             </div>
           ) : (
-            <DistributionSummaryCard 
+            <DistributionSummaryCard
               totalTon={totalTonTersalurkan}
               totalBags={totalBagsTersalurkan}
               chartData={generateChartData()}

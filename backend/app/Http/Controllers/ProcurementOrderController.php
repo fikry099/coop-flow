@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Models\InventoryMutation;
 
 class ProcurementOrderController extends Controller
 {
@@ -392,17 +393,54 @@ class ProcurementOrderController extends Controller
 
     /**
      * STAGE 5: KOPERASI KLIK SAAT FISIK PUPUK SUDAH BONGKAR DI GUDANG KDMP
+     * Menambahkan stok ke tabel fertilizers & mencatat riwayat mutasi masuk
      */
     public function completeOrder($id): JsonResponse
     {
-        $order = ProcurementOrder::findOrFail($id);
+        $order = ProcurementOrder::with('items')->findOrFail($id);
 
-        $order->update([
-            'status_logistik' => 'SELESAI',
-            'completed_at' => now()
-        ]);
-        
-        return response()->json(['success' => true, 'message' => 'Selesai! Stok pupuk resmi diterima fisik & ditambahkan ke sistem gudang Koperasi.']);
+        if ($order->status_logistik !== 'SIAP_TEBUS_LINI_4') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pengadaan belum dirilis oleh Dinas Pertanian, tidak dapat dikonfirmasi selesai.'
+            ], 400);
+        }
+
+        DB::beginTransaction();
+        try {
+            foreach ($order->items as $item) {
+                // 1. Tambahkan stok ke tabel fertilizers
+                DB::table('fertilizers')
+                    ->where('id', $item->fertilizer_id)
+                    ->increment('current_stock_kg', $item->final_weight_kg);
+
+                // 2. Catat riwayat mutasi masuk 
+                InventoryMutation::create([
+                    'fertilizer_id' => $item->fertilizer_id,
+                    'farmer_id' => null,
+                    'type' => 'masuk',
+                    'quantity_kg' => (int) $item->final_weight_kg,  // ← cast ke integer
+                    'description' => 'Penerimaan pengadaan PO ' . $order->po_number,
+                ]);
+            }
+
+            $order->update([
+                'status_logistik' => 'SELESAI',
+                'completed_at' => now()
+            ]);
+
+            DB::commit();
+            return response()->json([
+                'success' => true,
+                'message' => 'Selesai! Stok pupuk resmi diterima fisik & ditambahkan ke sistem gudang Koperasi.'
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal memproses penerimaan stok: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**

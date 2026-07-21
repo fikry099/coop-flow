@@ -9,7 +9,8 @@ import axios from "axios";
 import DetailStepper from "@/app/components/dashboard/dinas/validasi/detail/DetailStepper";
 import InfoPengadaan from "@/app/components/dashboard/dinas/validasi/detail/InfoPengadaan";
 import RincianItemTable from "@/app/components/dashboard/dinas/validasi/detail/RincianItemTable";
-import ActionModal from "@/app/components/dashboard/dinas/validasi/detail/ActionModal"; // Import Modal Baru
+import ActionModal from "@/app/components/dashboard/dinas/validasi/detail/ActionModal";
+import LogistikPanel from "@/app/components/dashboard/dinas/validasi/detail/LogistikPanel";
 
 export default function DetailValidasiPage() {
   const router = useRouter();
@@ -68,7 +69,7 @@ const handleActionConfirm = async (payload: { status: "APPROVED" | "REJECTED"; r
     setModalType(null);
     fetchDetailData();
   } catch (err: any) {
-    alert(err.response?.data?.message || "Gagal memperbarui status verifikasi pengadaan");
+    alert(err.response?.data?.message || "Gagal memperbarui status pengiriman.");
   } finally {
     setIsSubmitting(false);
   }
@@ -100,21 +101,38 @@ const handleActionConfirm = async (payload: { status: "APPROVED" | "REJECTED"; r
     <div className="space-y-6">
       {/* Top Header Navigation */}
       <div className="flex items-center gap-3">
-        <button onClick={handleBack} className="p-2 hover:bg-zinc-100 rounded-xl transition border border-zinc-200 bg-white">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4 text-zinc-600">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+        <button
+          onClick={handleBack}
+          className="p-2 hover:bg-zinc-100 rounded-xl transition border border-zinc-200 bg-white"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2.5}
+            stroke="currentColor"
+            className="w-4 h-4 text-zinc-600"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"
+            />
           </svg>
         </button>
         <div>
           <div className="text-xs font-semibold text-zinc-400 flex items-center gap-1.5">
-            <span>Dashboard</span> &gt; <span>Validasi Pengadaan</span> &gt; <span className="text-zinc-500">Detail Pengajuan</span>
+            <span>Dashboard</span> &gt; <span>Validasi Pengadaan</span> &gt;{" "}
+            <span className="text-zinc-500">Detail Pengajuan</span>
           </div>
-          <h1 className="text-xl font-black text-zinc-900 mt-0.5">Detail Pengajuan</h1>
+          <h1 className="text-xl font-black text-zinc-900 mt-0.5">
+            Detail Pengajuan
+          </h1>
         </div>
       </div>
 
       {/* 1. Komponen Alur Progres Tracking Dinamis */}
-      <DetailStepper 
+      <DetailStepper
         statusVerifikasi={data?.status_verifikasi}
         statusLogistik={data?.status_logistik}
         createdAt={data?.created_at}
@@ -132,19 +150,28 @@ const handleActionConfirm = async (payload: { status: "APPROVED" | "REJECTED"; r
       {/* 4. Action Buttons Dinas (Hanya aktif jika status PENDING_DINAS) */}
       {data?.status_verifikasi === "PENDING_DINAS" && (
         <div className="flex justify-end gap-3 pt-2">
-          <button 
+          <button
             onClick={() => setModalType("reject")}
             className="px-6 py-2.5 bg-white border border-red-200 text-red-600 font-bold rounded-xl text-xs hover:bg-red-50 transition tracking-wide shadow-sm"
           >
             Tolak Pengajuan
           </button>
-          <button 
+          <button
             onClick={() => setModalType("approve")}
             className="px-6 py-2.5 bg-emerald-600 text-white font-bold rounded-xl text-xs hover:bg-emerald-700 shadow-sm transition tracking-wide"
           >
             Setujui Pengajuan
           </button>
         </div>
+      )}
+
+      {/* 5. Panel Logistik Dinas — konfirmasi tiba & rilis ke Koperasi */}
+      {["PROD_LINI_1_2", "GUDANG_LINI_3"].includes(data?.status_logistik) && (
+        <LogistikPanel
+          orderId={selectedId as number}
+          statusLogistik={data?.status_logistik}
+          onSuccess={fetchDetailData}
+        />
       )}
 
       {/* Rangkai Komponen Modal Konfirmasi Bersama State Tambahan */}

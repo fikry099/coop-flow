@@ -54,6 +54,7 @@ class RoleAndUserSeeder extends Seeder
                 'city_code' => 'KABUPATEN SLEMAN',
                 'district_code' => 'GODEAN',
                 'village_code' => 'SIDOMULYO',
+                'status' => 'ACTIVE',
             ]
         );
         if (!$adminLapangan->hasRole($roleAdminLapangan)) {

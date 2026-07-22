@@ -1,33 +1,65 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import api from "@/app/lib/axios"; 
+import { useRouter } from "next/navigation"; // 1. Import useRouter
+import api from "@/app/lib/axios";
 import ValidasiStats from "@/app/components/dashboard/dinas/validasi/ValidasiStats";
 import ValidasiTable from "@/app/components/dashboard/dinas/validasi/ValidasiTable";
-import { HiMagnifyingGlass, HiAdjustmentsHorizontal } from "react-icons/hi2";
+import {
+  HiMagnifyingGlass,
+  HiAdjustmentsHorizontal,
+  HiArrowLeft, // 2. Import ikon panah kiri
+} from "react-icons/hi2";
 
 export default function ValidasiPengadaanPage() {
+  const router = useRouter(); // 3. Inisialisasi router
+
   const [orders, setOrders] = useState([]);
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ total: 0, disetujui: 0, menunggu: 0, ditolak: 0 });
+  const [stats, setStats] = useState({
+    total: 0,
+    disetujui: 0,
+    menunggu: 0,
+    perluKonfirmasiFisik: 0,
+    ditolak: 0,
+  });
 
   useEffect(() => {
-    // Ambil data langsung menggunakan endpoint resource dari model Laravel
-    api.get("/cooperative/procurement")
+    api
+      .get("/cooperative/procurement")
       .then((res) => {
         const data = res.data.data || [];
         setOrders(data);
         setFilteredOrders(data);
 
-        // Pengolahan data statistik real-time
         const total = data.length;
-        const disetujui = data.filter((o: any) => o.status_verifikasi === "APPROVED" || o.status_verifikasi === "PENDING_KEMENKO").length;
-        const menunggu = data.filter((o: any) => o.status_verifikasi === "PENDING_DINAS").length;
-        const ditolak = data.filter((o: any) => o.status_verifikasi === "REJECTED_DINAS").length;
 
-        setStats({ total, disetujui, menunggu, ditolak });
+        const menunggu = data.filter(
+          (o: any) => o.status_verifikasi === "PENDING_DINAS",
+        ).length;
+
+        const disetujui = data.filter(
+          (o: any) =>
+            [
+              "PENDING_KEMENKO",
+              "PENDING_KEMENKO_ADJUSTED",
+              "APPROVED_ADJUSTED",
+            ].includes(o.status_verifikasi) &&
+            !["GUDANG_LINI_3"].includes(o.status_logistik),
+        ).length;
+
+        const perluKonfirmasiFisik = data.filter(
+          (o: any) => o.status_logistik === "GUDANG_LINI_3",
+          "APPROVED",
+        ).length;
+
+        const ditolak = data.filter((o: any) =>
+          ["REJECTED_DINAS", "REJECTED_KEMENKO"].includes(o.status_verifikasi),
+        ).length;
+
+        setStats({ total, disetujui, menunggu, perluKonfirmasiFisik, ditolak });
         setLoading(false);
       })
       .catch((err) => {
@@ -36,12 +68,12 @@ export default function ValidasiPengadaanPage() {
       });
   }, []);
 
-  // Filter pencarian client-side instan
   useEffect(() => {
     const term = search.toLowerCase();
-    const result = orders.filter((o: any) =>
-      o.po_number.toLowerCase().includes(term) ||
-      (o.cooperative?.name || "").toLowerCase().includes(term)
+    const result = orders.filter(
+      (o: any) =>
+        o.po_number.toLowerCase().includes(term) ||
+        (o.cooperative?.name || "").toLowerCase().includes(term),
     );
     setFilteredOrders(result);
   }, [search, orders]);
@@ -50,7 +82,9 @@ export default function ValidasiPengadaanPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-100 space-y-3">
         <div className="animate-spin rounded-full h-9 w-9 border-b-2 border-emerald-600" />
-        <span className="text-xs font-bold text-zinc-400 tracking-wider uppercase">Sinkronisasi Dokumen...</span>
+        <span className="text-xs font-bold text-zinc-400 tracking-wider uppercase">
+          Sinkronisasi Dokumen...
+        </span>
       </div>
     );
   }
@@ -58,14 +92,30 @@ export default function ValidasiPengadaanPage() {
   return (
     <div className="space-y-6 pb-8">
       {/* Breadcrumb & Title */}
-      <div>
-        <div className="text-xs text-zinc-400 font-semibold mb-1 flex items-center space-x-1">
-          <span>Dashboard</span>
-          <span>&gt;</span>
-          <span className="text-zinc-600 font-bold">Validasi Pengadaan</span>
+      <div className="flex items-start gap-4">
+        {/* 4. Tambahkan Tombol Kembali */}
+        <button
+          onClick={() => router.back()}
+          className="mt-2.5 p-2 rounded-full hover:bg-zinc-200 text-zinc-500 transition-colors"
+          aria-label="Kembali ke halaman sebelumnya"
+        >
+          <HiArrowLeft className="text-xl" />
+        </button>
+
+        {/* Pembungkus teks judul */}
+        <div>
+          <div className="text-xs text-zinc-400 font-semibold mb-1 flex items-center space-x-1">
+            <span>Dashboard</span>
+            <span>&gt;</span>
+            <span className="text-zinc-600 font-bold">Validasi Pengadaan</span>
+          </div>
+          <h1 className="text-2xl font-black text-emerald-700 tracking-tight">
+            Validasi Pengadaan
+          </h1>
+          <p className="text-xs text-zinc-400 font-semibold mt-0.5">
+            Kelola validasi pengadaan pupuk
+          </p>
         </div>
-        <h1 className="text-2xl font-black text-zinc-800 tracking-tight">Validasi Pengadaan</h1>
-        <p className="text-xs text-zinc-400 font-semibold mt-0.5">Kelola validasi pengadaan pupuk</p>
       </div>
 
       {/* Komponen Statistik Grid */}

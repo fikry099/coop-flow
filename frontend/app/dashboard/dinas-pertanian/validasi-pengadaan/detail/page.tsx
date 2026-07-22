@@ -11,30 +11,46 @@ import InfoPengadaan from "@/app/components/dashboard/dinas/validasi/detail/Info
 import RincianItemTable from "@/app/components/dashboard/dinas/validasi/detail/RincianItemTable";
 import ActionModal from "@/app/components/dashboard/dinas/validasi/detail/ActionModal";
 import LogistikPanel from "@/app/components/dashboard/dinas/validasi/detail/LogistikPanel";
+import { ReceiptConfirmationModal } from "@/app/components/dashboard/dinas/validasi/detail/ReceiptConfirmationModal";
+
+// Interface untuk item penyesuaian (adjust)
+interface AdjustedItemPayload {
+  id: number;
+  final_bags_ordered: number;
+}
+
+type ModalType = "approve" | "reject" | "adjust" | null;
 
 export default function DetailValidasiPage() {
   const router = useRouter();
   const { selectedId, setSelectedId } = useProcurementStore();
-  
+
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // State Pengendali Modal Kontrol
-  const [modalType, setModalType] = useState<"approve" | "reject" | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  // State Pengendali Modal Kontrol (approve | reject | adjust)
+  const [modalType, setModalType] = useState<ModalType>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
+  // State khusus Modal Konfirmasi Penerimaan Fisik (Stage 4 - Lini 3)
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState<boolean>(false);
+
+  // Function untuk mengambil data detail pengadaan
   const fetchDetailData = async () => {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const response = await api.get(`/cooperative/procurement/${selectedId}`);
       const result = response.data;
       setData(result.data || result);
     } catch (err: any) {
       if (axios.isAxiosError(err)) {
-        setError(err.response?.data?.message || "Gagal mengambil data detail pengadaan");
+        setError(
+          err.response?.data?.message ||
+            "Gagal mengambil data detail pengadaan",
+        );
       } else {
         setError("Terjadi kesalahan sistem");
       }
@@ -56,28 +72,50 @@ export default function DetailValidasiPage() {
     router.push("/dashboard/dinas-pertanian/validasi-pengadaan");
   };
 
-const handleActionConfirm = async (payload: { status: "APPROVED" | "REJECTED"; reason?: string }) => {
-  try {
-    setIsSubmitting(true);
-    
-    // Sesuaikan payload agar key-nya cocok dengan validasi backend
-    await api.post(`/dinas/procurement/${selectedId}/verify`, {
-      action: payload.status === "APPROVED" ? "APPROVE" : "REJECT", // Ubah ke 'action'
-      rejection_reason: payload.reason,
-    });
+  // Handler Konfirmasi Aksi dari Modal (Setuju / Tolak / Penyesuaian)
+  const handleActionConfirm = async (payload: {
+    status: "APPROVED" | "REJECTED" | "ADJUST";
+    reason?: string;
+    items?: AdjustedItemPayload[];
+  }) => {
+    try {
+      setIsSubmitting(true);
 
-    setModalType(null);
-    fetchDetailData();
-  } catch (err: any) {
-    alert(err.response?.data?.message || "Gagal memperbarui status pengiriman.");
-  } finally {
-    setIsSubmitting(false);
-  }
-};
+      const actionType =
+        payload.status === "APPROVED"
+          ? "APPROVE"
+          : payload.status === "REJECTED"
+            ? "REJECT"
+            : "ADJUST";
 
+      const requestPayload: Record<string, any> = {
+        action: actionType,
+      };
+
+      if (payload.status === "REJECTED") {
+        requestPayload.rejection_reason = payload.reason;
+      } else if (payload.status === "ADJUST") {
+        requestPayload.adjustment_reason = payload.reason;
+        requestPayload.items = payload.items;
+      }
+
+      await api.post(`/dinas/procurement/${selectedId}/verify`, requestPayload);
+
+      setModalType(null);
+      fetchDetailData();
+    } catch (err: any) {
+      alert(
+        err.response?.data?.message || "Gagal memperbarui status pengajuan.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // UI Skeleton saat Loading Data
   if (isLoading) {
     return (
-      <div className="space-y-4 animate-pulse">
+      <div className="space-y-4 animate-pulse p-2">
         <div className="h-6 bg-zinc-200 rounded w-1/4"></div>
         <div className="h-20 bg-zinc-100 rounded-xl"></div>
         <div className="h-44 bg-zinc-100 rounded-xl"></div>
@@ -86,11 +124,17 @@ const handleActionConfirm = async (payload: { status: "APPROVED" | "REJECTED"; r
     );
   }
 
+  // UI Tampilan Error
   if (error) {
     return (
       <div className="p-6 max-w-md mx-auto text-center space-y-4">
-        <div className="p-4 bg-red-50 text-red-600 rounded-xl font-medium">{error}</div>
-        <button onClick={handleBack} className="px-4 py-2 bg-zinc-800 text-white rounded-lg text-sm">
+        <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl font-medium text-sm">
+          {error}
+        </div>
+        <button
+          onClick={handleBack}
+          className="px-4 py-2 bg-zinc-800 text-white rounded-lg text-xs font-semibold hover:bg-zinc-700 transition"
+        >
           Kembali ke Tabel
         </button>
       </div>
@@ -104,6 +148,7 @@ const handleActionConfirm = async (payload: { status: "APPROVED" | "REJECTED"; r
         <button
           onClick={handleBack}
           className="p-2 hover:bg-zinc-100 rounded-xl transition border border-zinc-200 bg-white"
+          title="Kembali"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -125,7 +170,7 @@ const handleActionConfirm = async (payload: { status: "APPROVED" | "REJECTED"; r
             <span>Dashboard</span> &gt; <span>Validasi Pengadaan</span> &gt;{" "}
             <span className="text-zinc-500">Detail Pengajuan</span>
           </div>
-          <h1 className="text-xl font-black text-zinc-900 mt-0.5">
+          <h1 className="text-2xl font-black text-emerald-700 mt-0.5">
             Detail Pengajuan
           </h1>
         </div>
@@ -157,6 +202,12 @@ const handleActionConfirm = async (payload: { status: "APPROVED" | "REJECTED"; r
             Tolak Pengajuan
           </button>
           <button
+            onClick={() => setModalType("adjust")}
+            className="px-5 py-2.5 bg-amber-500 text-white font-bold rounded-xl text-xs hover:bg-amber-600 transition tracking-wide shadow-sm"
+          >
+            Sesuaikan Pupuk
+          </button>
+          <button
             onClick={() => setModalType("approve")}
             className="px-6 py-2.5 bg-emerald-600 text-white font-bold rounded-xl text-xs hover:bg-emerald-700 shadow-sm transition tracking-wide"
           >
@@ -165,8 +216,20 @@ const handleActionConfirm = async (payload: { status: "APPROVED" | "REJECTED"; r
         </div>
       )}
 
-      {/* 5. Panel Logistik Dinas — konfirmasi tiba & rilis ke Koperasi */}
-      {["PROD_LINI_1_2", "GUDANG_LINI_3"].includes(data?.status_logistik) && (
+      {/* 5. Stage 4: Konfirmasi Penerimaan Fisik di Lini 3 (status_logistik = PROD_LINI_1_2) */}
+      {data?.status_logistik === "PROD_LINI_1_2" && (
+        <div className="flex justify-end pt-2">
+          <button
+            onClick={() => setIsReceiptModalOpen(true)}
+            className="px-8 py-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-sm rounded-xl shadow-sm transition-all duration-200 flex items-center justify-center gap-2"
+          >
+            Konfirmasi Penerimaan Fisik (Lini 3)
+          </button>
+        </div>
+      )}
+
+      {/* 6. Panel Logistik Dinas — rilis ke Koperasi (Lini 4) setelah barang ada di Gudang Lini 3 */}
+      {data?.status_logistik === "GUDANG_LINI_3" && (
         <LogistikPanel
           orderId={selectedId as number}
           statusLogistik={data?.status_logistik}
@@ -182,6 +245,17 @@ const handleActionConfirm = async (payload: { status: "APPROVED" | "REJECTED"; r
         isSubmitting={isSubmitting}
         onClose={() => setModalType(null)}
         onConfirm={handleActionConfirm}
+      />
+
+      {/* Modal Konfirmasi Penerimaan Fisik Stage 4 */}
+      <ReceiptConfirmationModal
+        isOpen={isReceiptModalOpen}
+        onClose={() => setIsReceiptModalOpen(false)}
+        order={data}
+        onSuccess={() => {
+          setIsReceiptModalOpen(false);
+          fetchDetailData();
+        }}
       />
     </div>
   );

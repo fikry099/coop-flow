@@ -20,7 +20,10 @@ export default function DetailValidasiKemenkoPage() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [modalType, setModalType] = useState<"approve" | "reject" | null>(null);
+  // State modalType mendukung 'approve', 'reject', dan 'adjust'
+  const [modalType, setModalType] = useState<
+    "approve" | "reject" | "adjust" | null
+  >(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchDetailData = async () => {
@@ -58,15 +61,36 @@ export default function DetailValidasiKemenkoPage() {
   };
 
   const handleActionConfirm = async (payload: {
-    status: "APPROVED" | "REJECTED";
+    status: "APPROVED" | "REJECTED" | "ADJUST";
     reason?: string;
+    items?: Array<{ id: number; final_bags_ordered: number }>;
   }) => {
     try {
       setIsSubmitting(true);
-      await api.post(`/procurement/${selectedId}/approve-quota`, {
-        action: payload.status === "APPROVED" ? "APPROVE" : "REJECT",
-        rejection_reason: payload.reason,
-      });
+
+      const actionType =
+        payload.status === "APPROVED"
+          ? "APPROVE"
+          : payload.status === "REJECTED"
+            ? "REJECT"
+            : "ADJUST";
+
+      const requestPayload: Record<string, any> = {
+        action: actionType,
+      };
+
+      if (payload.status === "REJECTED") {
+        requestPayload.rejection_reason = payload.reason;
+      } else if (payload.status === "ADJUST") {
+        requestPayload.adjustment_reason = payload.reason;
+        requestPayload.items = payload.items;
+      }
+
+      await api.post(
+        `/procurement/${selectedId}/approve-quota`,
+        requestPayload,
+      );
+
       setModalType(null);
       fetchDetailData();
     } catch (err: any) {
@@ -107,12 +131,16 @@ export default function DetailValidasiKemenkoPage() {
   }
 
   // Kondisi tahap mana yang sedang aktif
-  const needsApproval = data?.status_verifikasi === "PENDING_KEMENKO";
+    const needsApproval =
+      data?.status_verifikasi === "PENDING_KEMENKO" ||
+      data?.status_verifikasi === "PENDING_KEMENKO_ADJUSTED";
+  
   const needsDispatch =
     data?.status_verifikasi === "APPROVED" && data?.status_logistik === "NONE";
 
   return (
     <div className="space-y-6">
+      {/* Header Breadcrumb & Navigation */}
       <div className="flex items-center gap-3">
         <button
           onClick={handleBack}
@@ -138,7 +166,7 @@ export default function DetailValidasiKemenkoPage() {
             <span>Dashboard</span> &gt; <span>Validasi Kemenko</span> &gt;{" "}
             <span className="text-zinc-500">Detail Pengajuan</span>
           </div>
-          <h1 className="text-xl font-black text-zinc-900 mt-0.5">
+          <h1 className="text-2xl font-black text-emerald-700 mt-0.5">
             Detail Pengajuan
           </h1>
         </div>
@@ -156,14 +184,20 @@ export default function DetailValidasiKemenkoPage() {
       <InfoPengadaan data={data} />
       <RincianItemTable items={data?.items} />
 
-      {/* TAHAP 1: Tombol approve/reject kuota — hanya muncul saat PENDING_KEMENKO */}
+      {/* TAHAP 1: Tombol Aksi Kemenko (Muncul saat PENDING_KEMENKO) */}
       {needsApproval && (
-        <div className="flex justify-end gap-3 pt-2">
+        <div className="flex justify-end items-center gap-3 pt-2">
           <button
             onClick={() => setModalType("reject")}
-            className="px-6 py-2.5 bg-white border border-red-200 text-red-600 font-bold rounded-xl text-xs hover:bg-red-50 transition tracking-wide shadow-sm"
+            className="px-5 py-2.5 bg-white border border-red-200 text-red-600 font-bold rounded-xl text-xs hover:bg-red-50 transition tracking-wide shadow-sm"
           >
             Tolak Kuota
+          </button>
+          <button
+            onClick={() => setModalType("adjust")}
+            className="px-5 py-2.5 bg-amber-500 text-white font-bold rounded-xl text-xs hover:bg-amber-600 transition tracking-wide shadow-sm"
+          >
+            Sesuaikan Pupuk
           </button>
           <button
             onClick={() => setModalType("approve")}
@@ -182,6 +216,7 @@ export default function DetailValidasiKemenkoPage() {
         />
       )}
 
+      {/* Modal Konfirmasi & Adjust */}
       <ActionModal
         isOpen={modalType !== null}
         type={modalType}

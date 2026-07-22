@@ -104,7 +104,7 @@ function CustomControls({ containerId }: { containerId: string }) {
   }, [map]);
 
   return (
-    <div className="absolute top-4 right-4 z-[400] bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-zinc-200 p-1 flex flex-col gap-1.5">
+    <div className="absolute top-4 right-4 z-400 bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-zinc-200 p-1 flex flex-col gap-1.5">
       <button 
         onClick={() => map.zoomIn()}
         className="w-9 h-9 flex items-center justify-center rounded-xl text-zinc-700 hover:bg-zinc-100 active:scale-95 transition"
@@ -188,7 +188,7 @@ export default function MapComponent({ farmers }: MapComponentProps) {
 
             // Template Popup
             const popupContent = (
-              <div className="font-sans text-zinc-800 p-2 min-w-[220px] max-w-[260px]">
+              <div className="font-sans text-zinc-800 p-2 min-w-55 max-w-65">
                 <div className="flex items-center gap-1.5 pb-2 border-b border-zinc-100 mb-2">
                   <span className="p-1 bg-zinc-50 rounded-lg" style={{ color: farmerColor }}>
                     <FiMapPin className="w-3.5 h-3.5" fill="none" />
@@ -200,7 +200,7 @@ export default function MapComponent({ farmers }: MapComponentProps) {
                   <div className="flex justify-between"><span className="text-zinc-400">Luas Lahan:</span> <span className="font-semibold text-zinc-900 bg-zinc-50 px-1.5 py-0.2 rounded font-mono" style={{ color: farmerColor }}>{land.area} Ha</span></div>
                   <div className="flex flex-col pt-1 border-t border-zinc-50">
                     <span className="text-zinc-400">Alamat Lokasi:</span>
-                    <span className="text-zinc-700 italic mt-0.5 break-words line-clamp-2 leading-relaxed">{land.location_address || '-'}</span>
+                    <span className="text-zinc-700 italic mt-0.5 wrap-break-word line-clamp-2 leading-relaxed">{land.location_address || '-'}</span>
                   </div>
                 </div>
               </div>

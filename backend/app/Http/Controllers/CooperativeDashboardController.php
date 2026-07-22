@@ -9,11 +9,9 @@ use App\Models\TransactionItem;
 use App\Models\Fertilizer;
 use App\Models\Plant;
 use App\Models\AiPrediction;
-use App\Models\InventoryMutation;
 use App\Models\Cooperative;
 use Illuminate\Http\JsonResponse;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
 
 class CooperativeDashboardController extends Controller
 {
@@ -65,16 +63,15 @@ class CooperativeDashboardController extends Controller
                 ];
             });
 
-       // ==========================================
-        // 3. TREN STOK & DISTRIBUSI (6 BULAN TERAKHIR) - DIPERBAIKI
+        // ==========================================
+        // 3. TREN STOK & DISTRIBUSI (6 BULAN TERAKHIR)
         // ==========================================
         $monthsRange = collect(range(6, 0))->reverse(); 
 
-        // A. Data Tren Stok Pupuk (Estimasi berdasarkan stok saat ini + distribusi mundur)
+        // A. Data Tren Stok Pupuk
         $trenStokPupuk = $monthsRange->map(function ($i) use ($cooperativeId, $totalStokKg) {
             $date = Carbon::now()->subMonths($i);
             
-            // Hitung jumlah yang keluar setelah bulan tersebut
             $distribusiSetelah = TransactionItem::whereHas('fertilizer', function($q) use ($cooperativeId) {
                     $q->where('cooperative_id', $cooperativeId);
                 })
@@ -89,7 +86,7 @@ class CooperativeDashboardController extends Controller
             ];
         })->values();
 
-        // B. Data Tren Distribusi Perbulan (Line Chart Biru)
+        // B. Data Tren Distribusi Perbulan
         $trenDistribusiPerbulan = $monthsRange->map(function ($i) use ($cooperativeId) {
             $date = Carbon::now()->subMonths($i);
             
@@ -122,7 +119,6 @@ class CooperativeDashboardController extends Controller
                     })
                     ->sum('actual_purchased_kg');
 
-                // Jika packaging_size_kg di model Fertilizer adalah 0, kita bagi dengan 50kg (asumsi 1 sak)
                 $pembagi = $item->packaging_size_kg > 0 ? $item->packaging_size_kg : 50;
                 $jumlahPermintaan = round($totalPermintaanBulanIni / $pembagi);
 
@@ -136,27 +132,26 @@ class CooperativeDashboardController extends Controller
             ->values();
 
         // ==========================================
-        // 5. PETA SEBARAN (GEOJSON STANDARD FORMAT)
+        // PETA SEBARAN (DARI KOLOM POLYGON_COORDINATES)
         // ==========================================
-        $petaSebaran = Land::select('id', 'land_name', 'center_latitude', 'center_longitude', 'area')
-            ->whereNotNull('center_latitude')
-            ->whereNotNull('center_longitude')
+        $petaSebaran = Land::with(['farmer.user']) // Cukup load relasi farmer.user
+            ->select('id', 'farmer_id', 'land_name', 'center_latitude', 'center_longitude', 'area', 'polygon_coordinates')
             ->get()
             ->map(function ($land) {
                 $statusKebutuhan = $land->area > 2.0 ? 'Tinggi' : ($land->area > 1.0 ? 'Sedang' : 'Rendah');
 
                 return [
-                    'type' => 'Feature',
-                    'properties' => [
-                        'land_id' => $land->id,
-                        'name' => $land->land_name,
-                        'area' => (float)$land->area,
-                        'kebutuhan' => $statusKebutuhan
+                    'land_id' => $land->id,
+                    'name' => $land->land_name,
+                    'farmer_name' => $land->farmer->user->name ?? ($land->farmer->name ?? 'Petani'),
+                    'area' => (float)$land->area,
+                    'kebutuhan' => $statusKebutuhan,
+                    'center' => [
+                        (float)$land->center_latitude,
+                        (float)$land->center_longitude
                     ],
-                    'geometry' => [
-                        'type' => 'Point',
-                        'coordinates' => [(float)$land->center_longitude, (float)$land->center_latitude]
-                    ]
+                    // Ambil langsung dari atribut model (sudah otomatis berbentuk Array)
+                    'polygon_coordinates' => $land->polygon_coordinates ?? []
                 ];
             });
 
@@ -187,61 +182,54 @@ class CooperativeDashboardController extends Controller
         });
 
         // ==========================================
-// 7. AKTIVITAS TERBARU (DIAMBIL DARI TRANSAKSI PETANI)
-// ==========================================
-// Kita ambil transaksi terbaru yang berelasi dengan petani & item pupuknya
-$aktivitasTerbaru = Transaction::with(['farmer', 'items.fertilizer'])
-    ->whereHas('items.fertilizer', function($q) use ($cooperativeId) {
-        // Memastikan transaksi ini terkait dengan pupuk milik koperasi bersangkutan
-        $q->where('cooperative_id', $cooperativeId);
-    })
-    ->latest()
-    ->take(5) // Mengambil 5 transaksi teratas untuk di-breakdown ke item
-    ->get()
-    ->flatMap(function($transaction) {
-        // Karena 1 transaksi bisa punya banyak item pupuk, kita pecah menggunakan flatMap
-        return $transaction->items->map(function($item) use ($transaction) {
-            $namaPetani = $transaction->farmer->name ?? 'Petani';
-            $namaPupuk = $item->fertilizer->name ?? 'Pupuk';
-            
-            // Konversi kg ke Ton jika jumlahnya banyak, atau gunakan satuan Karung/Bags jika cocok
-            $jumlahBeliKg = $item->actual_purchased_kg;
-            $satuan = $jumlahBeliKg >= 1000 
-                ? round($jumlahBeliKg / 1000, 1) . " Ton" 
-                : round($jumlahBeliKg) . " Kg";
+        // 7. AKTIVITAS TERBARU
+        // ==========================================
+        $aktivitasTerbaru = Transaction::with(['farmer', 'items.fertilizer'])
+            ->whereHas('items.fertilizer', function($q) use ($cooperativeId) {
+                $q->where('cooperative_id', $cooperativeId);
+            })
+            ->latest()
+            ->take(5)
+            ->get()
+            ->flatMap(function($transaction) {
+                return $transaction->items->map(function($item) use ($transaction) {
+                    $namaPetani = $transaction->farmer->name ?? 'Petani';
+                    $namaPupuk = $item->fertilizer->name ?? 'Pupuk';
+                    
+                    $jumlahBeliKg = $item->actual_purchased_kg;
+                    $satuan = $jumlahBeliKg >= 1000 
+                        ? round($jumlahBeliKg / 1000, 1) . " Ton" 
+                        : round($jumlahBeliKg) . " Kg";
 
-            // Tentukan tipe secara acak/kondisional untuk visualisasi frontend
-            // Jika Anda punya kolom status di transaksi bisa dipakai, di sini kita buat variasi dinamis
-            $idUnik = $item->id;
-            if ($idUnik % 3 === 0) {
-                $tipe = 'persetujuan';
-                $judul = "Permintaan {$namaPupuk} disetujui";
-                $subjudul = "Oleh {$namaPetani} (" . ($transaction->payment_method ?? 'Cash') . ")";
-            } elseif ($idUnik % 3 === 1) {
-                $tipe = 'penerimaan';
-                $judul = "Gudang Menyalurkan {$satuan} {$namaPupuk}";
-                $subjudul = "Petani: {$namaPetani}";
-            } else {
-                // Contoh jika statusnya sukses disalurkan (truk biru)
-                $tipe = 'distribusi';
-                $judul = "Distribusi {$namaPupuk} ke Lahan Selesai";
-                $subjudul = "No. Transaksi: TRX-{$transaction->id}";
-            }
+                    $idUnik = $item->id;
+                    if ($idUnik % 3 === 0) {
+                        $tipe = 'persetujuan';
+                        $judul = "Permintaan {$namaPupuk} disetujui";
+                        $subjudul = "Oleh {$namaPetani} (" . ($transaction->payment_method ?? 'Cash') . ")";
+                    } elseif ($idUnik % 3 === 1) {
+                        $tipe = 'penerimaan';
+                        $judul = "Gudang Menyalurkan {$satuan} {$namaPupuk}";
+                        $subjudul = "Petani: {$namaPetani}";
+                    } else {
+                        $tipe = 'distribusi';
+                        $judul = "Distribusi {$namaPupuk} ke Lahan Selesai";
+                        $subjudul = "No. Transaksi: TRX-{$transaction->id}";
+                    }
 
-            return [
-                'id' => $item->id,
-                'tipe' => $tipe,
-                'judul' => $judul,
-                'subjudul' => $subjudul,
-                'waktu' => $transaction->created_at->diffForHumans()
-            ];
-        });
-    })
-    ->take(8) 
-    ->values();
+                    return [
+                        'id' => $item->id,
+                        'tipe' => $tipe,
+                        'judul' => $judul,
+                        'subjudul' => $subjudul,
+                        'waktu' => $transaction->created_at->diffForHumans()
+                    ];
+                });
+            })
+            ->take(8) 
+            ->values();
 
         // ==========================================
-        // JSON RESPONSE COMPLETE
+        // JSON RESPONSE
         // ==========================================
         return response()->json([
             'success' => true,

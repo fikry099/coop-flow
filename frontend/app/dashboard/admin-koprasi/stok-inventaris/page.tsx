@@ -209,22 +209,44 @@ export default function StokSaatIniPage() {
             <FaBoxes className="text-xs text-zinc-500" />
             <span>Kelola Pupuk</span>
           </button>
-
+          
           {/* Dropdown Menu Filter */}
           {isFilterOpen && (
             <div className="absolute right-0 md:left-auto top-full mt-2 w-64 bg-white border border-zinc-200 rounded-lg shadow-xl p-4 z-50 text-zinc-700 space-y-4">
               <div>
-                <label className="text-xs font-bold uppercase text-zinc-400 block mb-2">Status Stok</label>
-                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-full border border-zinc-200 rounded-md p-1.5 text-sm bg-white">
+                <label 
+                  htmlFor="status-stok-select" 
+                  className="text-xs font-bold uppercase text-zinc-400 block mb-2"
+                >
+                  Status Stok
+                </label>
+                <select 
+                  id="status-stok-select"
+                  value={statusFilter} 
+                  onChange={(e) => setStatusFilter(e.target.value)} 
+                  className="w-full border border-zinc-200 rounded-md p-1.5 text-sm bg-white"
+                >
                   <option value="all">Semua Status</option>
                   <option value="tersedia">Stok Tersedia</option>
                   <option value="menipis">Stok Menipis</option>
                   <option value="habis">Stok Habis</option>
                 </select>
               </div>
+              
               <div>
-                <label className="text-xs font-bold uppercase text-zinc-400 block mb-2">Urutan Harga</label>
-                <select value={priceSort} onChange={(e) => setPriceSort(e.target.value)} className="w-full border border-zinc-200 rounded-md p-1.5 text-sm bg-white">
+                <label 
+                  htmlFor="urutan-harga-select" 
+                  className="text-xs font-bold uppercase text-zinc-400 block mb-2"
+                >
+                  Urutan Harga
+                </label>
+                <select 
+                  id="urutan-harga-select"
+                  value={priceSort} 
+                  onChange={(e) => setPriceSort(e.target.value)} 
+                  className="w-full border border-zinc-200 rounded-md p-1.5 text-sm bg-white"
+                >
+              
                   <option value="none">Bawaan</option>
                   <option value="highest">Harga Tertinggi</option>
                   <option value="lowest">Harga Terendah</option>

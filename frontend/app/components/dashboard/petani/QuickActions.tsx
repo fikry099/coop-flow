@@ -1,15 +1,18 @@
 'use client';
 
 import React from 'react';
+import { useRouter } from 'next/navigation'; // 👈 Import router Next.js
 import { FaMapMarkerAlt, FaSeedling, FaWallet, FaHistory } from 'react-icons/fa';
 
 export default function QuickMenu() {
+  const router = useRouter();
+
   return (
     <div className="space-y-3">
       <h2 className="text-sm font-extrabold text-slate-900">Menu</h2>
 
       <div className="grid grid-cols-2 gap-3">
-        {/* Menu 1: Lahan */}
+        {/* Menu 1: Lahan (Mengubah URL parameter tanpa reload) */}
         <div className="bg-emerald-200/60 p-3.5 rounded-2xl flex flex-col justify-between space-y-3">
           <div className="flex items-start space-x-2">
             <div className="p-2 bg-white rounded-xl text-emerald-700 shadow-xs">
@@ -20,7 +23,10 @@ export default function QuickMenu() {
               <p className="text-[9px] text-slate-600">Lihat lahan milik saya</p>
             </div>
           </div>
-          <button className="w-full bg-white text-emerald-800 text-[10px] font-extrabold py-1.5 rounded-xl shadow-2xs hover:bg-emerald-50 transition cursor-pointer">
+          <button 
+            onClick={() => router.push('?view=lands')} // 👈 URL berubah jadi ?view=lands
+            className="w-full bg-white text-emerald-800 text-[10px] font-extrabold py-1.5 rounded-xl shadow-2xs hover:bg-emerald-50 transition cursor-pointer"
+          >
             Lihat Lahan Saya
           </button>
         </div>
@@ -33,10 +39,10 @@ export default function QuickMenu() {
             </div>
             <div>
               <p className="font-extrabold text-xs text-slate-900">Pemupukan</p>
-              <p className="text-[9px] text-slate-600">Lihat lahan milik saya</p>
+              <p className="text-[9px] text-slate-600">Lihat pemupukan saya</p>
             </div>
           </div>
-          <button className="w-full bg-white text-amber-800 text-[10px] font-extrabold py-1.5 rounded-xl shadow-2xs hover:bg-amber-50 transition cursor-pointer">
+          <button className="w-full bg-white text-amber-800 text-[10px] font-extrabold py-1.5 rounded-xl shadow-2xs hover:bg-emerald-50 transition cursor-pointer">
             Lihat Pemupukan
           </button>
         </div>
@@ -52,7 +58,7 @@ export default function QuickMenu() {
               <p className="text-[9px] text-slate-600">Lihat riwayat transaksi saya</p>
             </div>
           </div>
-          <button className="w-full bg-white text-fuchsia-800 text-[10px] font-extrabold py-1.5 rounded-xl shadow-2xs hover:bg-fuchsia-50 transition cursor-pointer">
+          <button className="w-full bg-white text-fuchsia-800 text-[10px] font-extrabold py-1.5 rounded-xl shadow-2xs hover:bg-emerald-50 transition cursor-pointer">
             Lihat Riwayat
           </button>
         </div>
@@ -68,7 +74,7 @@ export default function QuickMenu() {
               <p className="text-[9px] text-slate-600">Lihat riwayat pemupukan saya</p>
             </div>
           </div>
-          <button className="w-full bg-white text-sky-800 text-[10px] font-extrabold py-1.5 rounded-xl shadow-2xs hover:bg-sky-50 transition cursor-pointer">
+          <button className="w-full bg-white text-sky-800 text-[10px] font-extrabold py-1.5 rounded-xl shadow-2xs hover:bg-emerald-50 transition cursor-pointer">
             Lihat Riwayat
           </button>
         </div>

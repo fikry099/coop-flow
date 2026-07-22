@@ -223,10 +223,10 @@ class FertilizerController extends Controller implements HasMiddleware
             } else {
                 // Ambil data transaksi petani 30 hari terakhir
                 try {
-                    $totalKebutuhanSebulan = (float) \DB::table('ml_logs')
-                        ->where('fertilizer_id', $fertilizer->id)
-                        ->where('created_at', '>=', now()->subDays(30))
-                        ->sum('actual_purchased_kg');
+                $totalKebutuhanSebulan = (float) \DB::table('transaction_ml_logs')
+                    ->where('fertilizer_id', $fertilizer->id)
+                    ->where('created_at', '>=', now()->subDays(30))
+                    ->sum('actual_purchased_kg');
                 } catch (\Exception $dbEx) {
                     $totalKebutuhanSebulan = 0.0;
                 }

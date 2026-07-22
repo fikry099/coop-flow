@@ -27,8 +27,8 @@ class AuthController extends Controller
             'role' => 'nullable|string|in:ketua-poktan,petani,dinas-pertanian,petugas-koperasi,admin-lapangan,kemenko-pangan',
             'cooperative_id' => 'required_if:role,petani,ketua-poktan|exists:cooperatives,id',
             
-            // Validasi khusus jika role petani (NIK wajib diisi)
-            'nik' => 'required_if:role,petani|nullable|string|digits:16|unique:farmers,nik',
+            // Validasi NIK (tanpa nullable agar required_if diproses saat role=petani)
+            'nik' => 'required_if:role,petani|string|digits:16|unique:farmers,nik',
 
             // --- Validasi Kode Wilayah ---
             'province_code' => 'nullable|string|size:2',
@@ -48,8 +48,8 @@ class AuthController extends Controller
 
         $roleName = $request->role ?? 'petani';
 
-        // Petani langsung APPROVED, role lain default PENDING
-        $status = ($roleName === 'petani') ? 'APPROVED' : 'PENDING';
+        // Petani langsung ACTIVE, role lain default PENDING
+        $status = ($roleName === 'petani') ? 'ACTIVE' : 'PENDING';
 
         DB::beginTransaction();
         try {
@@ -109,7 +109,6 @@ class AuthController extends Controller
      */
     public function login(Request $request)
     {
-        // 1. Ambil input login (Bisa dari payload 'login_identifier', 'email', atau 'nik')
         $identifier = $request->input('login_identifier') ?? $request->input('email') ?? $request->input('nik');
 
         if (!$identifier) {
@@ -122,25 +121,19 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        // 2. Cari User berdasarkan Email ATAU NIK di tabel farmers
         $user = User::where('email', $identifier)
             ->orWhereHas('farmer', function ($query) use ($identifier) {
                 $query->where('nik', $identifier);
             })
             ->first();
 
-        // 3. Cek Ketersediaan User dan Password
         if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json([
                 'message' => 'Email/NIK atau password salah.'
             ], 401);
         }
 
-        // ==========================================
-        // 4. PENGECEKAN STATUS AKUN (Petani Dikecualikan)
-        // ==========================================
         if ($user->hasAnyRole(['petugas-koperasi', 'admin-lapangan'])) {
-            
             if ($user->status === 'PENDING') {
                 return response()->json([
                     'message' => 'Gagal masuk: Akun Koperasi Anda masih dalam proses verifikasi oleh Kemenko Pangan.'
@@ -154,9 +147,6 @@ class AuthController extends Controller
             }
         }
 
-        // ==========================================
-        // 5. Generasi Token & Kirim Respon Sukses
-        // ==========================================
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([

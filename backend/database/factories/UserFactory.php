@@ -30,7 +30,28 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
+            'status' => 'ACTIVE',// <-- Ditambahkan di sini menggunakan lowercase
         ];
+    }
+
+    /**
+     * Indicate that the model's status should be pending.
+     */
+    public function pending(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => 'PENDING',
+        ]);
+    }
+
+    /**
+     * Indicate that the model's status should be rejected.
+     */
+    public function rejected(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => 'REJECTED',
+        ]);
     }
 
     /**

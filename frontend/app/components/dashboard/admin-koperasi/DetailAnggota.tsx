@@ -4,18 +4,15 @@ import React, { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import api from "../../../lib/axios";
 
-// Memuat MapComponent secara dinamis tanpa SSR agar tidak bentrok dengan objek window (Leaflet/GIS)
-const MapComponent = dynamic(
-  () => import("../LatestMap").then(() => import("../MapComponent")),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="w-full h-full bg-zinc-100 flex items-center justify-center text-zinc-400 text-xs animate-pulse">
-        Memuat Peta Citra Satelit Lahan...
-      </div>
-    ),
-  },
-);
+// Memuat MapComponent secara dinamis tanpa SSR
+const MapComponent = dynamic(() => import("../MapComponent"), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full bg-zinc-100 flex items-center justify-center text-zinc-400 text-xs animate-pulse">
+      Memuat Peta Citra Satelit Lahan...
+    </div>
+  ),
+});
 
 interface RegionData {
   id: string | number;
@@ -48,10 +45,15 @@ interface Land {
   center_latitude?: string;
   center_longitude?: string;
   document_name?: string;
+  ownership_document?: string;
   notes?: string;
-  weather_avg_temp?: string;
-  weather_avg_humidity?: string;
-  weather_rainfall?: string;
+  location_address?: string;
+  weather_avg_temp?: string | number;
+  weather_avg_humidity?: string | number;
+  weather_rainfall?: string | number;
+  average_temperature?: string | number;
+  average_humidity?: string | number;
+  average_monthly_precipitation?: string | number;
   plants?: Plant[];
 }
 
@@ -78,6 +80,73 @@ interface DetailAnggotaProps {
   onBack: () => void;
 }
 
+// Helper untuk Render Ikon Komoditas Tanaman
+const renderPlantIcon = (name?: string) => {
+  const lower = name?.toLowerCase() || "";
+
+  if (lower.includes("padi")) {
+    return (
+      <svg
+        className="w-5 h-5 text-emerald-700"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M12 2v20M12 18l-4-3m4 3l4-3M12 14l-5-3.5m5 3.5l5-3.5M12 10l-4-3m4 3l4-3M12 6l-3-2m3 2l3-2" />
+      </svg>
+    );
+  }
+  if (lower.includes("jagung")) {
+    return (
+      <svg
+        className="w-5 h-5 text-amber-600"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M12 2c-4 4-5 9-5 13a5 5 0 0 0 10 0c0-4-1-9-5-13z" />
+        <path d="M12 22v-3" />
+        <path d="M9 10h6M8 14h8" />
+      </svg>
+    );
+  }
+  if (lower.includes("cabai") || lower.includes("cabe")) {
+    return (
+      <svg
+        className="w-5 h-5 text-rose-600"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M12 2c1 2 0 4-1 5C8 9 6 12 6 16a6 6 0 0 0 12 0c0-5-3-9-6-14z" />
+        <path d="M12 2v3" />
+      </svg>
+    );
+  }
+  return (
+    <svg
+      className="w-5 h-5 text-emerald-600"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 22v-8M12 14C8 14 5 10 5 6c4 0 7 3 7 8M12 14c4 0 7-3 7-8-4 0-7 3-7 8" />
+    </svg>
+  );
+};
+
 export default function DetailAnggota({
   farmerId,
   onBack,
@@ -86,9 +155,7 @@ export default function DetailAnggota({
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // State akordion: Secara default membuka lahan pertama (index 0)
   const [openLahanIndex, setOpenLahanIndex] = useState<number>(0);
-  // State sub-akordion tanaman di dalam lahan
   const [openPlantIndex, setOpenPlantIndex] = useState<number>(0);
 
   useEffect(() => {
@@ -126,11 +193,11 @@ export default function DetailAnggota({
 
   return (
     <div className="p-2 space-y-5 bg-gray-50 min-h-screen text-gray-800">
-      {/* Tombol Kembali */}
+      {/* Header & Tombol Kembali */}
       <div className="flex items-center gap-3 mb-2">
         <button
           onClick={onBack}
-          className="p-2 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg transition-colors shadow-sm"
+          className="p-2 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg transition-colors shadow-xs"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -150,17 +217,16 @@ export default function DetailAnggota({
         <h1 className="text-xl font-bold text-gray-950">Detail Petani</h1>
       </div>
 
-      {/* ==================== 1. KARTU PROFIL ATAS (PRESISI REFERENSI) ==================== */}
-      <div className="bg-white p-6 rounded-2xl border border-zinc-200/80 shadow-sm flex flex-col md:flex-row items-stretch gap-6 w-full">
-        {/* Bagian Foto & Nama Utama (Kiri) */}
+      {/* ==================== 1. KARTU PROFIL ATAS ==================== */}
+      <div className="bg-white p-6 rounded-2xl border border-zinc-200/80 shadow-xs flex flex-col md:flex-row items-stretch gap-6 w-full">
+        {/* Foto & Nama Utama */}
         <div className="flex items-center gap-5 flex-[1.2] min-w-70">
-          {/* Avatar Bulat Abu-abu User Profile */}
-          <div className="w-20 h-20 bg-[#b0bec5]/40 text-white rounded-full flex items-center justify-center shrink-0">
+          <div className="w-20 h-20 bg-zinc-200 text-zinc-400 rounded-full flex items-center justify-center shrink-0">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               fill="currentColor"
               viewBox="0 0 24 24"
-              className="w-14 h-14 text-white"
+              className="w-14 h-14 text-zinc-400"
             >
               <path
                 fillRule="evenodd"
@@ -176,9 +242,8 @@ export default function DetailAnggota({
             <p className="text-zinc-400 text-xs font-medium">
               NIK : {farmer.nik || "────────────────"}
             </p>
-            {/* Badge Hijau Kelompok Tani */}
             <div className="pt-1">
-              <span className="inline-block px-2.5 py-1 bg-[#e8f5e9] text-[#2e7d32] font-semibold text-[10px] rounded-md border border-[#c8e6c9]/50">
+              <span className="inline-block px-2.5 py-1 bg-emerald-50 text-emerald-800 font-semibold text-[10px] rounded-md border border-emerald-200/50">
                 Kelompok Petani :{" "}
                 {farmer.farmer_group?.name || "Tidak Ada Kelompok"}
               </span>
@@ -186,7 +251,7 @@ export default function DetailAnggota({
           </div>
         </div>
 
-        {/* Kolom Kontak No HP & Email (Tengah Kiri) */}
+        {/* Kontak */}
         <div className="hidden md:block w-px bg-zinc-200 self-stretch my-2" />
         <div className="flex flex-col justify-center space-y-3 flex-1 pl-0 md:pl-2">
           <div>
@@ -194,7 +259,16 @@ export default function DetailAnggota({
               No HP / WA
             </span>
             <span className="font-bold text-zinc-800 text-sm flex items-center gap-1.5 mt-0.5">
-              <span className="text-base">📞</span> {farmer.user?.phone || "—"}
+              <svg
+                className="w-4 h-4 text-emerald-600"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+              </svg>
+              {farmer.user?.phone || "—"}
             </span>
           </div>
           <div>
@@ -202,12 +276,22 @@ export default function DetailAnggota({
               Email
             </span>
             <span className="font-bold text-zinc-800 text-xs flex items-center gap-1.5 mt-0.5">
-              <span className="text-base">✉️</span> {farmer.user?.email || "—"}
+              <svg
+                className="w-4 h-4 text-emerald-600"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <rect width="20" height="16" x="2" y="4" rx="2" />
+                <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+              </svg>
+              {farmer.user?.email || "—"}
             </span>
           </div>
         </div>
 
-        {/* Kolom Alamat Domisili Petani: Provinsi & Kabupaten (Tengah Kanan) */}
+        {/* Alamat Provinsi & Kabupaten */}
         <div className="hidden md:block w-px bg-zinc-200 self-stretch my-2" />
         <div className="flex flex-col justify-center space-y-3 flex-1 pl-0 md:pl-2">
           <div>
@@ -228,7 +312,7 @@ export default function DetailAnggota({
           </div>
         </div>
 
-        {/* Kolom Alamat Domisili Petani: Kecamatan & Desa (Kanan) */}
+        {/* Alamat Kecamatan & Desa */}
         <div className="hidden md:block w-px bg-zinc-200 self-stretch my-2" />
         <div className="flex flex-col justify-center space-y-3 flex-1 pl-0 md:pl-2">
           <div>
@@ -250,12 +334,11 @@ export default function DetailAnggota({
         </div>
       </div>
 
-      {/* ==================== 2. AKORDION LIST LAHAN PETANI (PRESISI LAHAN) ==================== */}
+      {/* ==================== 2. AKORDION LIST LAHAN PETANI ==================== */}
       {farmer.lands &&
         farmer.lands.map((land: Land, index: number) => {
           const isLahanOpen = openLahanIndex === index;
 
-          // Payload khusus untuk merender peta lahan tunggal aktif
           const singleFarmerPayload = [
             {
               ...farmer,
@@ -263,27 +346,53 @@ export default function DetailAnggota({
             },
           ];
 
+          const docValue = land.ownership_document || land.document_name;
+          const notesValue = land.notes || land.location_address;
+
+          const tempValue = land.average_temperature ?? land.weather_avg_temp;
+          const humidityValue =
+            land.average_humidity ?? land.weather_avg_humidity;
+          const rainfallValue =
+            land.average_monthly_precipitation ?? land.weather_rainfall;
+
           return (
             <div
-              key={land.id}
-              className="bg-white rounded-2xl border border-zinc-200/80 shadow-sm overflow-hidden mb-4"
+              key={land.id || index}
+              className="bg-white rounded-2xl border border-zinc-200/80 shadow-xs overflow-hidden mb-4"
             >
-              {/* Tombol Trigger Akordion Lahan */}
+              {/* Trigger Akordion Lahan */}
               <button
                 onClick={() => setOpenLahanIndex(isLahanOpen ? -1 : index)}
-                className="w-full p-5 bg-white flex items-center justify-between hover:bg-zinc-50/40 border-b border-zinc-100 font-bold text-[#0f3424] text-sm tracking-wide transition-colors"
+                className="w-full p-4 md:p-5 bg-white flex items-center justify-between hover:bg-zinc-50/50 border-b border-zinc-100 font-bold text-[#0f3424] text-sm tracking-wide transition-colors"
               >
-                <span className="flex items-center gap-2.5">
-                  <span className="text-xl">📍</span>{" "}
+                <span className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-100/70 text-emerald-800 flex items-center justify-center shrink-0 border border-emerald-200/60 shadow-xs">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="w-4 h-4"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+                      <circle cx="12" cy="10" r="3" />
+                    </svg>
+                  </div>
                   Informasi Lahan {index + 1}
                 </span>
+
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   fill="none"
                   viewBox="0 0 24 24"
                   strokeWidth={2.5}
                   stroke="currentColor"
-                  className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${isLahanOpen ? "rotate-180" : ""}`}
+                  className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${
+                    isLahanOpen ? "rotate-180" : ""
+                  }`}
                 >
                   <path
                     strokeLinecap="round"
@@ -297,179 +406,296 @@ export default function DetailAnggota({
                 <div className="p-6">
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                     {/* PARAMETER INFO DETAIL KIRI */}
-                    <div className="lg:col-span-5 space-y-3.5 text-sm text-zinc-800 self-start">
-                      {[
-                        {
-                          label: "Lahan",
-                          value: land.land_name || `Lahan Ke-${index + 1}`,
-                        },
-                        {
-                          label: "Provinsi",
-                          value:
-                            land.province?.name || farmer.province?.name || "—",
-                        },
-                        {
-                          label: "Kabupaten / Kota",
-                          value: land.city?.name || farmer.city?.name || "—",
-                        },
-                        {
-                          label: "Kecamatan",
-                          value:
-                            land.district?.name || farmer.district?.name || "—",
-                        },
-                        {
-                          label: "Desa / Kelurahan",
-                          value:
-                            land.village?.name || farmer.village?.name || "—",
-                        },
-                        {
-                          label: "Status Lahan",
-                          value: land.status || "—",
-                        },
-                        {
-                          label: "Luas Lahan",
-                          value: land.area
-                            ? `${land.area} ${land.unit || "Ha"}`
-                            : "—",
-                        },
-                        {
-                          label: "Luas Area",
-                          value: land.area ? `${land.area} Area` : "—",
-                        },
-                        {
-                          label: "Koordinat Titik",
-                          value: land.polygon_coordinates
-                            ? `${land.polygon_coordinates.length} Titik`
-                            : "0 Titik",
-                        },
-                        {
-                          label: "Koordinat Tengah",
-                          value:
-                            land.center_latitude && land.center_longitude
-                              ? `${land.center_latitude}, ${land.center_longitude}`
+                    <div className="lg:col-span-5 flex flex-col">
+                      <div className="space-y-3.5 text-sm text-zinc-800">
+                        {[
+                          {
+                            label: "Lahan",
+                            value: land.land_name || `Lahan Ke-${index + 1}`,
+                          },
+                          {
+                            label: "Provinsi",
+                            value:
+                              land.province?.name ||
+                              farmer.province?.name ||
+                              "—",
+                          },
+                          {
+                            label: "Kabupaten / Kota",
+                            value: land.city?.name || farmer.city?.name || "—",
+                          },
+                          {
+                            label: "Kecamatan",
+                            value:
+                              land.district?.name ||
+                              farmer.district?.name ||
+                              "—",
+                          },
+                          {
+                            label: "Desa / Kelurahan",
+                            value:
+                              land.village?.name || farmer.village?.name || "—",
+                          },
+                          {
+                            label: "Status Lahan",
+                            value: land.status || "—",
+                          },
+                          {
+                            label: "Luas Lahan",
+                            value: land.area
+                              ? `${land.area} ${land.unit || "Ha"}`
                               : "—",
-                          isMono: true,
-                        },
-                        {
-                          label: "Dokumen Kepemilikan",
-                          value: land.document_name || "—",
-                          isLink: !!land.document_name,
-                        },
-                        {
-                          label: "Catatan",
-                          value: land.notes || "—",
-                        },
-                      ].map((item, idx) => (
-                        <div
-                          key={idx}
-                          className="grid grid-cols-12 items-start gap-1"
-                        >
-                          {/* Kolom 1: Label Kiri */}
-                          <div className="col-span-4 text-zinc-700 font-medium tracking-tight">
-                            {item.label}
-                          </div>
-                          {/* Kolom 2: Simbol Titik Dua */}
-                          <div className="col-span-1 text-center text-zinc-900 font-semibold">
-                            :
-                          </div>
-                          {/* Kolom 3: Nilai Kanan */}
+                          },
+                          {
+                            label: "Koordinat Titik",
+                            value: land.polygon_coordinates
+                              ? `${land.polygon_coordinates.length} Titik`
+                              : "0 Titik",
+                          },
+                          {
+                            label: "Koordinat Tengah",
+                            value:
+                              land.center_latitude && land.center_longitude
+                                ? `${land.center_latitude}, ${land.center_longitude}`
+                                : "—",
+                            isMono: true,
+                          },
+                          {
+                            label: "Catatan",
+                            value: notesValue || "—",
+                          },
+                        ].map((item, idx) => (
                           <div
-                            className={`col-span-7 pl-1 text-zinc-900 ${item.isMono ? "font-mono text-[11px]" : "font-semibold"} ${item.isLink ? "text-emerald-700 underline cursor-pointer hover:text-emerald-800" : ""}`}
+                            key={idx}
+                            className="grid grid-cols-12 items-start gap-1"
                           >
-                            {item.value}
+                            <div className="col-span-4 text-zinc-700 font-medium tracking-tight">
+                              {item.label}
+                            </div>
+                            <div className="col-span-1 text-center text-zinc-900 font-semibold">
+                              :
+                            </div>
+                            <div
+                              className={`col-span-7 pl-1 text-zinc-900 ${
+                                item.isMono
+                                  ? "font-mono text-[11px]"
+                                  : "font-semibold"
+                              }`}
+                            >
+                              {item.value}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
+
+                      {/* ---------------- BAGIAN DOKUMEN ---------------- */}
+                      <div className="mt-6 pt-5 border-t border-zinc-100">
+                        <span className="text-[10px] font-bold text-zinc-400 block uppercase tracking-wider mb-3">
+                          Dokumen Kepemilikan Lahan
+                        </span>
+
+                        {docValue ? (
+                          <div
+                            onClick={() => {
+                              const url = docValue.startsWith("http")
+                                ? docValue
+                                : `${process.env.NEXT_PUBLIC_API_URL || ""}/storage/${docValue}`;
+                              window.open(url, "_blank");
+                            }}
+                            className="flex items-center gap-3 p-3 bg-white border border-zinc-200/80 rounded-xl hover:bg-zinc-50 cursor-pointer shadow-sm transition-all group"
+                          >
+                            {/* Ikon Dokumen - Style PDF Kemenko */}
+                            <div className="w-11 h-11 bg-rose-50 text-rose-600 rounded-lg flex items-center justify-center shrink-0 border border-rose-100/50 group-hover:bg-rose-100 transition-colors">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 24 24"
+                                fill="currentColor"
+                                className="w-6 h-6"
+                              >
+                                <path d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0 0 16.5 9h-1.875a1.875 1.875 0 0 1-1.875-1.875V5.25A3.75 3.75 0 0 0 9 1.5H5.625ZM7.5 15a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5h-7.5A.75.75 0 0 1 7.5 15Zm.75 2.25a.75.75 0 0 0 0 1.5H12a.75.75 0 0 0 0-1.5H8.25Z" />
+                                <path d="M12.971 1.816A5.23 5.23 0 0 1 14.25 5.25v1.875c0 .207.168.375.375.375H16.5a5.23 5.23 0 0 1 3.434 1.279 9.768 9.768 0 0 0-6.963-6.963Z" />
+                              </svg>
+                            </div>
+
+                            {/* Info Text */}
+                            <div className="flex flex-col flex-1 overflow-hidden">
+                              <p className="text-sm font-bold text-zinc-900 truncate">
+                                {docValue.split("/").pop() ||
+                                  "Dokumen-Lahan-Petani.pdf"}
+                              </p>
+                              <p className="text-[11px] text-zinc-500 font-medium mt-0.5 group-hover:text-emerald-600 transition-colors">
+                                Ketuk untuk melihat dokumen
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-3 bg-zinc-50 border border-dashed border-zinc-200 rounded-xl text-center">
+                            <p className="text-sm text-zinc-400 italic">
+                              Tidak ada dokumen tertaut
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      {/* ---------------- END BAGIAN DOKUMEN ---------------- */}
                     </div>
 
                     {/* SISI KANAN: MAPS REAL INTERAKTIF & PANEL AGROIKLIM */}
                     <div className="lg:col-span-7 space-y-4">
-                      <span className="text-base font-bold text-zinc-400 block uppercase tracking-wider">
+                      <span className="text-xs font-bold text-zinc-400 block uppercase tracking-wider">
                         LOKASI DAN KOORDINAT LAHAN
                       </span>
 
-                      {/* Wadah Map Interaktif */}
-                      <div className="w-full h-70 rounded-2xl relative overflow-hidden bg-zinc-50 border border-zinc-200/80 shadow-inner z-0">
-                        <MapComponent farmers={singleFarmerPayload} />
+                      {/* Map Container */}
+                      <div
+                        key={`map-wrapper-${land.id || index}`}
+                        className="w-full h-70 rounded-2xl relative overflow-hidden bg-zinc-50 border border-zinc-200/80 shadow-inner z-0"
+                      >
+                        <MapComponent
+                          key={`map-instance-${land.id || index}`}
+                          farmers={singleFarmerPayload}
+                        />
                       </div>
 
-                      {/* Indikator Agro-Iklim */}
-                      <span className="text-[9px] font-bold text-zinc-400 block uppercase tracking-wider mt-2">
+                      {/* INDIKATOR AGRO-IKLIM DENGAN IKON VECTOR RELEVAN */}
+                      <span className="text-[10px] font-bold text-zinc-400 block uppercase tracking-wider mt-3">
                         INDIKATOR AGRO-IKLIM WILAYAH OTOMATIS
                       </span>
                       <div className="grid grid-cols-3 gap-3">
-                        <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-sm text-center flex flex-col items-center justify-center">
-                          <span className="text-emerald-600 text-base mb-0.5">
-                            🌡️
-                          </span>
-                          <p className="text-[9px] text-zinc-400 font-medium uppercase tracking-tight">
-                            Rata-rata Suhu
+                        {/* 1. IKON SUHU (Thermometer) */}
+                        <div className="bg-white p-3 rounded-xl border border-zinc-200/60 shadow-2xs text-center flex flex-col items-center justify-center">
+                          <div className="w-8 h-8 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center mb-1">
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="w-4 h-4"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z" />
+                            </svg>
+                          </div>
+                          <p className="text-[9px] text-zinc-400 font-semibold uppercase tracking-tight">
+                            RATA-RATA SUHU
                           </p>
                           <p className="text-xs font-bold text-zinc-800 mt-0.5">
-                            {land.weather_avg_temp || "—"} °C
+                            {tempValue !== undefined &&
+                            tempValue !== null &&
+                            tempValue !== ""
+                              ? `${tempValue} °C`
+                              : "—"}
                           </p>
                         </div>
-                        <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-sm text-center flex flex-col items-center justify-center">
-                          <span className="text-amber-500 text-base mb-0.5">
-                            🌤️
-                          </span>
-                          <p className="text-[9px] text-zinc-400 font-medium uppercase tracking-tight">
-                            Rata-rata Kl.
+
+                        {/* 2. IKON KELEMBAPAN (Water Droplet) */}
+                        <div className="bg-white p-3 rounded-xl border border-zinc-200/60 shadow-2xs text-center flex flex-col items-center justify-center">
+                          <div className="w-8 h-8 rounded-full bg-cyan-50 text-cyan-600 flex items-center justify-center mb-1">
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="w-4 h-4"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7Z" />
+                            </svg>
+                          </div>
+                          <p className="text-[9px] text-zinc-400 font-semibold uppercase tracking-tight">
+                            RATA-RATA KL.
                           </p>
                           <p className="text-xs font-bold text-zinc-800 mt-0.5">
-                            {land.weather_avg_humidity || "—"} %
+                            {humidityValue !== undefined &&
+                            humidityValue !== null &&
+                            humidityValue !== ""
+                              ? `${humidityValue} %`
+                              : "—"}
                           </p>
                         </div>
-                        <div className="bg-white p-3 rounded-xl border border-zinc-100 shadow-sm text-center flex flex-col items-center justify-center">
-                          <span className="text-blue-500 text-base mb-0.5">
-                            🌧️
-                          </span>
-                          <p className="text-[9px] text-zinc-400 font-medium uppercase tracking-tight">
-                            Hujan/Bulan
+
+                        {/* 3. IKON CURAH HUJAN (Cloud Rain) */}
+                        <div className="bg-white p-3 rounded-xl border border-zinc-200/60 shadow-2xs text-center flex flex-col items-center justify-center">
+                          <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-1">
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="w-4 h-4"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
+                              <path d="M16 14v6" />
+                              <path d="M8 14v6" />
+                              <path d="M12 16v6" />
+                            </svg>
+                          </div>
+                          <p className="text-[9px] text-zinc-400 font-semibold uppercase tracking-tight">
+                            HUJAN / BULAN
                           </p>
                           <p className="text-xs font-bold text-zinc-800 mt-0.5">
-                            {land.weather_rainfall || "—"} mm
+                            {rainfallValue !== undefined &&
+                            rainfallValue !== null &&
+                            rainfallValue !== ""
+                              ? `${rainfallValue} mm`
+                              : "—"}
                           </p>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* 3. SUB-AKORDION KOMODITAS TANAMAN DI DALAM LAHAN */}
+                  {/* 3. SUB-AKORDION KOMODITAS TANAMAN */}
                   <div className="pt-5 border-t border-gray-100 space-y-3 mt-5">
                     {land.plants &&
                       land.plants.map((plant: Plant, pIdx: number) => {
                         const isPlantOpen = openPlantIndex === pIdx;
+
                         return (
                           <div
-                            key={plant.id}
-                            className="border border-gray-100 rounded-xl overflow-hidden shadow-sm"
+                            key={plant.id || pIdx}
+                            className="border border-gray-200/80 rounded-xl overflow-hidden bg-white shadow-2xs transition-all"
                           >
-                            {/* Header Tanaman Baris */}
                             <div
                               onClick={() =>
                                 setOpenPlantIndex(isPlantOpen ? -1 : pIdx)
                               }
-                              className="p-3 bg-white hover:bg-gray-50/50 flex items-center justify-between cursor-pointer border-b border-gray-50 text-sm"
+                              className="p-3.5 bg-white hover:bg-gray-50/80 flex items-center justify-between cursor-pointer transition-colors text-sm"
                             >
                               <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-amber-500/10 text-xl rounded-xl flex items-center justify-center">
-                                  {plant.name?.toLowerCase().includes("jagung")
-                                    ? "🌽"
-                                    : "🌶️"}
+                                {/* Ikon Komoditas Vector */}
+                                <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center shrink-0 border border-emerald-100/80">
+                                  {renderPlantIcon(plant.name)}
                                 </div>
                                 <div>
-                                  <p className="font-bold text-gray-900">
+                                  <p className="font-semibold text-gray-900 capitalize">
                                     {plant.name || "Komoditas Tanaman"}
                                   </p>
-                                  <div className="flex items-center gap-2 text-sm text-gray-400 mt-0.5">
-                                    <span className="bg-gray-100 px-1.5 py-0.5 rounded">
-                                      {plant.planted_area || "—"}
+                                  <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
+                                    <span className="bg-gray-100 font-medium px-2 py-0.5 rounded text-gray-600">
+                                      {plant.planted_area || land.area || "—"}{" "}
+                                      {land.unit || "Ha"}
                                     </span>
+                                    <span>•</span>
                                     <span>Lahan {index + 1}</span>
                                     <span>•</span>
-                                    <span className="text-gray-500">
-                                      📍{" "}
+                                    <span className="inline-flex items-center gap-1 text-gray-500">
+                                      <svg
+                                        className="w-3 h-3 text-emerald-600 inline"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                      >
+                                        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+                                        <circle cx="12" cy="10" r="3" />
+                                      </svg>{" "}
                                       {land.district?.name ||
                                         farmer.district?.name ||
                                         "—"}
@@ -477,13 +703,16 @@ export default function DetailAnggota({
                                   </div>
                                 </div>
                               </div>
+
                               <svg
                                 xmlns="http://www.w3.org/2000/svg"
                                 fill="none"
                                 viewBox="0 0 24 24"
-                                strokeWidth={2.5}
+                                strokeWidth={2}
                                 stroke="currentColor"
-                                className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isPlantOpen ? "rotate-180" : ""}`}
+                                className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+                                  isPlantOpen ? "rotate-180" : ""
+                                }`}
                               >
                                 <path
                                   strokeLinecap="round"
@@ -493,51 +722,50 @@ export default function DetailAnggota({
                               </svg>
                             </div>
 
-                            {/* Detail Konten Tanaman */}
                             {isPlantOpen && (
-                              <div className="p-4 bg-white space-y-4 text-sm">
-                                <span className="text-base font-bold text-emerald-800 block uppercase tracking-wider border-b border-emerald-50 pb-1">
-                                  Informasi Tanaman
-                                </span>
-                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                              <div className="p-4 bg-gray-50/50 border-t border-gray-100 space-y-4 text-sm">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">
+                                    INFORMASI TANAMAN
+                                  </span>
+                                  <div className="h-px bg-emerald-100 flex-1"></div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-white p-3.5 rounded-lg border border-gray-100 shadow-2xs">
                                   <div>
-                                    <span className="text-gray-400 block text-sm">
+                                    <span className="text-gray-400 block text-xs font-medium uppercase tracking-wider mb-1">
                                       Nama Tanaman
                                     </span>
-                                    <span className="font-bold text-gray-900">
+                                    <span className="font-semibold text-gray-900 capitalize block">
                                       {plant.name || "—"}
                                     </span>
                                   </div>
+
                                   <div>
-                                    <span className="text-gray-400 block text-sm">
-                                      Varietas / Jenis
-                                    </span>
-                                    <span className="font-bold text-gray-900">
-                                      {plant.crop_type || "—"}
-                                    </span>
-                                  </div>
-                                  <div>
-                                    <span className="text-gray-400 block text-sm">
+                                    <span className="text-gray-400 block text-xs font-medium uppercase tracking-wider mb-1">
                                       Luas Ditanam
                                     </span>
-                                    <span className="font-bold text-gray-900">
-                                      {land.area || "—"} {land.unit || "Ha"}
+                                    <span className="font-semibold text-gray-900 block">
+                                      {plant.planted_area || land.area || "—"}{" "}
+                                      {land.unit || "Ha"}
                                     </span>
                                   </div>
+
                                   <div>
-                                    <span className="text-gray-400 block text-sm">
+                                    <span className="text-gray-400 block text-xs font-medium uppercase tracking-wider mb-1">
                                       Tanggal Tanam
                                     </span>
-                                    <span className="font-bold text-gray-900">
+                                    <span className="font-semibold text-gray-900 block">
                                       {plant.planting_date || "—"}
                                     </span>
                                   </div>
                                 </div>
-                                <div className="pt-2">
-                                  <span className="text-gray-400 block text-sm font-medium">
+
+                                <div className="bg-white p-3.5 rounded-lg border border-gray-100 shadow-2xs">
+                                  <span className="text-gray-400 block text-xs font-medium uppercase tracking-wider mb-1">
                                     Catatan
                                   </span>
-                                  <p className="text-gray-700 mt-0.5 italic">
+                                  <p className="text-gray-600 text-xs italic">
                                     {plant.notes ||
                                       "Tidak ada catatan untuk tanaman ini."}
                                   </p>

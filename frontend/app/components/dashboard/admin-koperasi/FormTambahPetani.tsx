@@ -45,7 +45,18 @@ interface FormTambahPetaniProps {
   availGroups?: any[];
 }
 
-export default function FormTambahPetani({ onSuccess, onCancel }: FormTambahPetaniProps) {
+// 🟢 Kelas util dipusatkan di sini agar konsisten & mudah disesuaikan lagi ke depannya
+const labelCls = "block text-sm font-semibold text-gray-700 mb-1.5";
+const inputCls =
+  "w-full px-4 py-2.5 border border-gray-200 rounded-lg text-base leading-6 text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-[#0F7B4A] transition-colors";
+const textareaCls = inputCls + " resize-none";
+const sectionTitleCls =
+  "text-sm font-bold text-[#0F7B4A] uppercase tracking-wider mb-4";
+
+export default function FormTambahPetani({
+  onSuccess,
+  onCancel,
+}: FormTambahPetaniProps) {
   const [loading, setLoading] = useState(false);
   const [groups, setGroups] = useState<FarmerGroup[]>([]);
   const [loadingGroups, setLoadingGroups] = useState(false);
@@ -115,7 +126,11 @@ export default function FormTambahPetani({ onSuccess, onCancel }: FormTambahPeta
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >,
+  ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
@@ -152,11 +167,15 @@ export default function FormTambahPetani({ onSuccess, onCancel }: FormTambahPeta
           nextLand.village_id = "";
         }
         return nextLand;
-      })
+      }),
     );
   };
 
-  const handleLandChange = (index: number, field: keyof LandItem | string, value: any) => {
+  const handleLandChange = (
+    index: number,
+    field: keyof LandItem | string,
+    value: any,
+  ) => {
     const landField = field as keyof LandItem;
 
     setLands((prevLands) => {
@@ -238,19 +257,33 @@ export default function FormTambahPetani({ onSuccess, onCancel }: FormTambahPeta
         data.append(`lands[${index}][unit]`, land.unit || "Hektar(Ha)");
         data.append(`lands[${index}][status]`, land.status || "Milik Sendiri");
 
-        if (land.province_id) data.append(`lands[${index}][province_id]`, land.province_id);
+        if (land.province_id)
+          data.append(`lands[${index}][province_id]`, land.province_id);
         if (land.city_id) data.append(`lands[${index}][city_id]`, land.city_id);
-        if (land.district_id) data.append(`lands[${index}][district_id]`, land.district_id);
-        if (land.village_id) data.append(`lands[${index}][village_id]`, land.village_id);
-        if (land.current_use) data.append(`lands[${index}][current_use]`, land.current_use);
-        if (land.soil_type) data.append(`lands[${index}][soil_type]`, land.soil_type);
-        if (land.water_source) data.append(`lands[${index}][water_source]`, land.water_source);
-        if (land.irrigation_type) data.append(`lands[${index}][irrigation_type]`, land.irrigation_type);
-        if (land.location_address) data.append(`lands[${index}][location_address]`, land.location_address);
+        if (land.district_id)
+          data.append(`lands[${index}][district_id]`, land.district_id);
+        if (land.village_id)
+          data.append(`lands[${index}][village_id]`, land.village_id);
+        if (land.current_use)
+          data.append(`lands[${index}][current_use]`, land.current_use);
+        if (land.soil_type)
+          data.append(`lands[${index}][soil_type]`, land.soil_type);
+        if (land.water_source)
+          data.append(`lands[${index}][water_source]`, land.water_source);
+        if (land.irrigation_type)
+          data.append(`lands[${index}][irrigation_type]`, land.irrigation_type);
+        if (land.location_address)
+          data.append(
+            `lands[${index}][location_address]`,
+            land.location_address,
+          );
 
         // Upload berkas fisik sesuai struktur $allLandFiles[$index]['ownership_document']
         if (land.ownership_document instanceof File) {
-          data.append(`lands[${index}][ownership_document]`, land.ownership_document);
+          data.append(
+            `lands[${index}][ownership_document]`,
+            land.ownership_document,
+          );
         }
       });
 
@@ -275,10 +308,13 @@ export default function FormTambahPetani({ onSuccess, onCancel }: FormTambahPeta
             .filter((p) => p.name.trim() !== "")
             .map((p) => ({
               name: p.name,
-              planting_date: p.planting_date || new Date().toISOString().split("T")[0],
+              planting_date:
+                p.planting_date || new Date().toISOString().split("T")[0],
               current_phase: p.current_phase || "Vegetatif",
               last_fertilizer_type: p.last_fertilizer_type || null,
-              last_fertilizer_amount: p.last_fertilizer_amount ? Number(p.last_fertilizer_amount) : null,
+              last_fertilizer_amount: p.last_fertilizer_amount
+                ? Number(p.last_fertilizer_amount)
+                : null,
               last_phase: p.last_phase || null,
             }));
 
@@ -288,7 +324,7 @@ export default function FormTambahPetani({ onSuccess, onCancel }: FormTambahPeta
               api.post("/plants", {
                 land_id: targetLandId,
                 plants: validPlants,
-              })
+              }),
             );
           }
         }
@@ -311,7 +347,10 @@ export default function FormTambahPetani({ onSuccess, onCancel }: FormTambahPeta
       // Tangkap dan tampilkan error rinci dari Laravel
       let errorMsg = "Terjadi kesalahan saat menyimpan data.";
       if (err.response?.data) {
-        if (typeof err.response.data === "object" && !err.response.data.message) {
+        if (
+          typeof err.response.data === "object" &&
+          !err.response.data.message
+        ) {
           errorMsg = Object.values(err.response.data).flat().join("\n");
         } else if (err.response.data.errors) {
           errorMsg = Object.values(err.response.data.errors).flat().join("\n");
@@ -327,59 +366,62 @@ export default function FormTambahPetani({ onSuccess, onCancel }: FormTambahPeta
   };
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6 relative">
-      <div className="border-b border-gray-100 pb-3 mb-4 flex justify-between items-center">
-        <h2 className="text-md font-bold text-gray-800 flex items-center gap-2">
-          <span className="w-2 h-4 bg-[#0F7B4A] rounded-full inline-block"></span>
+    <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 mb-6 relative">
+      <div className="border-b border-gray-100 pb-4 mb-6 flex justify-between items-center">
+        <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+          <span className="w-2 h-5 bg-[#0F7B4A] rounded-full inline-block"></span>
           Form Tambah Master Data Petani Baru
         </h2>
-        <button onClick={onCancel} className="text-xs text-gray-400 hover:text-gray-600">
+        <button
+          onClick={onCancel}
+          className="text-sm text-gray-400 hover:text-gray-600 font-medium"
+        >
           Tutup Form ✕
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-8">
         <div>
-          <h3 className="text-xs font-bold text-[#0F7B4A] uppercase tracking-wider mb-3">1. Informasi Akun & Personal</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <h3 className={sectionTitleCls}>1. Informasi Akun & Personal</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Nama Lengkap *</label>
+              <label className={labelCls}>Nama Lengkap *</label>
               <input
                 type="text"
                 name="name"
                 required
                 value={formData.name}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none"
+                className={inputCls}
                 placeholder="Nama petani"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Email *</label>
+              <label className={labelCls}>Email *</label>
               <input
                 type="email"
                 name="email"
                 required
                 value={formData.email}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none"
+                className={inputCls}
                 placeholder="petani@email.com"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Password Baru *</label>
+              <label className={labelCls}>Password Baru *</label>
               <input
                 type="password"
                 name="password"
                 required
                 value={formData.password}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none"
+                className={inputCls}
                 placeholder="Minimal 8 karakter"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">NIK (16 Digit) *</label>
+              <label className={labelCls}>NIK (16 Digit) *</label>
               <input
                 type="text"
                 name="nik"
@@ -387,32 +429,34 @@ export default function FormTambahPetani({ onSuccess, onCancel }: FormTambahPeta
                 required
                 value={formData.nik}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none"
+                className={inputCls}
                 placeholder="16 digit NIK"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">No. Telepon / WA</label>
+              <label className={labelCls}>No. Telepon / WA</label>
               <input
                 type="text"
                 name="phone"
                 value={formData.phone}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none"
+                className={inputCls}
                 placeholder="08xxxx"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Kelompok Tani *</label>
+              <label className={labelCls}>Kelompok Tani *</label>
               <div className="flex gap-2">
                 <select
                   name="farmer_group_id"
                   required
                   value={formData.farmer_group_id}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none"
+                  className={inputCls + " bg-white"}
                 >
-                  <option value="">{loadingGroups ? "Memuat..." : "-- Pilih Kelompok Tani --"}</option>
+                  <option value="">
+                    {loadingGroups ? "Memuat..." : "-- Pilih Kelompok Tani --"}
+                  </option>
                   {groups.map((g) => (
                     <option key={g.id} value={g.id}>
                       {g.name}
@@ -422,7 +466,7 @@ export default function FormTambahPetani({ onSuccess, onCancel }: FormTambahPeta
                 <button
                   type="button"
                   onClick={() => setShowGroupModal(true)}
-                  className="px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-colors shrink-0"
+                  className="px-4 py-2.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-sm font-bold hover:bg-emerald-100 transition-colors shrink-0"
                 >
                   + Baru
                 </button>
@@ -430,35 +474,37 @@ export default function FormTambahPetani({ onSuccess, onCancel }: FormTambahPeta
             </div>
           </div>
 
-          <RegionSelectSection
-            provinceId={formData.province_id}
-            cityId={formData.city_id}
-            districtId={formData.district_id}
-            villageId={formData.village_id}
-            onChange={handleRegionChange}
-          />
+          <div className="mt-5">
+            <RegionSelectSection
+              provinceId={formData.province_id}
+              cityId={formData.city_id}
+              districtId={formData.district_id}
+              villageId={formData.village_id}
+              onChange={handleRegionChange}
+            />
+          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-5">
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Alamat Lengkap (RT/RW)</label>
+              <label className={labelCls}>Alamat Lengkap (RT/RW)</label>
               <textarea
                 name="address"
-                rows={2}
+                rows={3}
                 value={formData.address}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none"
+                className={textareaCls}
                 placeholder="Nama jalan, RT/RW..."
               ></textarea>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Catatan Tambahan Petani</label>
+              <label className={labelCls}>Catatan Tambahan Petani</label>
               <textarea
                 name="notes"
-                rows={2}
+                rows={3}
                 value={formData.notes}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none"
+                className={textareaCls}
                 placeholder="Catatan khusus mengenai petani..."
               ></textarea>
             </div>
@@ -472,19 +518,19 @@ export default function FormTambahPetani({ onSuccess, onCancel }: FormTambahPeta
           onRemoveRow={removeLandRow}
         />
 
-        <div className="flex justify-end gap-2 border-t border-gray-100 pt-4">
+        <div className="flex justify-end gap-3 border-t border-gray-100 pt-5">
           <button
             type="button"
             onClick={onCancel}
             disabled={loading}
-            className="px-5 py-2 border border-gray-200 hover:bg-gray-50 text-gray-600 rounded-lg text-xs font-semibold"
+            className="px-6 py-2.5 border border-gray-200 hover:bg-gray-50 text-gray-600 rounded-lg text-sm font-semibold transition-colors"
           >
             Batalkan
           </button>
           <button
             type="submit"
             disabled={loading}
-            className="px-5 py-2 bg-[#0F7B4A] hover:bg-emerald-800 text-white rounded-lg text-xs font-semibold transition-colors shadow-sm"
+            className="px-6 py-2.5 bg-[#0F7B4A] hover:bg-emerald-800 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {loading ? "Menyimpan ke Server..." : "Simpan Petani"}
           </button>
@@ -496,7 +542,10 @@ export default function FormTambahPetani({ onSuccess, onCancel }: FormTambahPeta
           onClose={() => setShowGroupModal(false)}
           onGroupCreated={(newGroup) => {
             setGroups((prev) => [newGroup, ...prev]);
-            setFormData((prev) => ({ ...prev, farmer_group_id: String(newGroup.id) }));
+            setFormData((prev) => ({
+              ...prev,
+              farmer_group_id: String(newGroup.id),
+            }));
           }}
         />
       )}

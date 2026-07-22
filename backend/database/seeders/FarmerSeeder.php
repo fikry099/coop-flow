@@ -16,6 +16,13 @@ class FarmerSeeder extends Seeder
 {
     public function run(): void
     {
+        // 0. Lokasi acuan (sama seperti Bapak Slamet - Sleman, DIY)
+        $refProvinceId = '34';
+        $refCityId = '3404';
+        $refDistrictId = '340402';
+        $refVillageId = '3404022003';
+        $refCooperativeId = 1;
+
         // 1. Bersihkan tabel anak terlebih dahulu untuk menghindari constraint violation
         Schema::disableForeignKeyConstraints();
         Plant::truncate();
@@ -45,7 +52,8 @@ class FarmerSeeder extends Seeder
                 'name' => 'Bapak Fikri',
                 'password' => Hash::make('password123'),
                 'phone' => '081234567898',
-                'address' => 'Desa Makmur Jaya RT 01/RW 02',
+                'address' => 'Dusun Sidomulyo RT 01/RW 02, Godean, Sleman',
+                'cooperative_id' => $refCooperativeId,
             ]
         );
         $user1->assignRole('petani');
@@ -54,10 +62,10 @@ class FarmerSeeder extends Seeder
             'user_id' => $user1->id,
             'farmer_group_id' => $group1->id, 
             'nik' => '3301011212800001',
-            'province_id' => '33',
-            'city_id' => '3301',
-            'district_id' => '330101',
-            'village_id' => '3301012001',
+            'province_id' => $refProvinceId,
+            'city_id' => $refCityId,
+            'district_id' => $refDistrictId,
+            'village_id' => $refVillageId,
             'total_land_area' => 3.50,
             'notes' => 'Petani padi senior dengan metode tumpang sari.',
         ]);
@@ -65,10 +73,10 @@ class FarmerSeeder extends Seeder
         // Lahan 1 milik Bapak Fikri (Tumpang Sari - Padi & Jagung)
         $land1 = $farmer1->lands()->create([
             'land_name' => 'Sawah Lor (Tumpang Sari)',
-            'province_id' => '33',
-            'city_id' => '3301',
-            'district_id' => '330101',
-            'village_id' => '3301012001',
+            'province_id' => $refProvinceId,
+            'city_id' => $refCityId,
+            'district_id' => $refDistrictId,
+            'village_id' => $refVillageId,
             'area' => 2.00,
             'unit' => 'Hektar(Ha)',
             'status' => 'Milik Sendiri',
@@ -101,10 +109,10 @@ class FarmerSeeder extends Seeder
         // Lahan 2 milik Bapak Fikri
         $land2 = $farmer1->lands()->create([
             'land_name' => 'Tegal Kidul',
-            'province_id' => '33',
-            'city_id' => '3301',
-            'district_id' => '330101',
-            'village_id' => '3301012001',
+            'province_id' => $refProvinceId,
+            'city_id' => $refCityId,
+            'district_id' => $refDistrictId,
+            'village_id' => $refVillageId,
             'area' => 1.50,
             'unit' => 'Hektar(Ha)',
             'status' => 'Milik Sendiri',
@@ -135,7 +143,8 @@ class FarmerSeeder extends Seeder
                 'name' => 'Ibu Febiyanti',
                 'password' => Hash::make('password123'),
                 'phone' => '082345678901',
-                'address' => 'Dusun Harapan Baru RT 04/RW 01',
+                'address' => 'Dusun Sidomulyo RT 04/RW 01, Godean, Sleman',
+                'cooperative_id' => $refCooperativeId,
             ]
         );
         $user2->assignRole('petani');
@@ -144,20 +153,20 @@ class FarmerSeeder extends Seeder
             'user_id' => $user2->id,
             'farmer_group_id' => $group1->id,
             'nik' => '3301015505850002',
-            'province_id' => '33',
-            'city_id' => '3301',
-            'district_id' => '330101',
-            'village_id' => '3301012001',
+            'province_id' => $refProvinceId,
+            'city_id' => $refCityId,
+            'district_id' => $refDistrictId,
+            'village_id' => $refVillageId,
             'total_land_area' => 1.25, 
             'notes' => 'Petani hortikultura cabai dan bawang.',
         ]);
 
         $land3 = $farmer2->lands()->create([
             'land_name' => 'Kebun Bawang',
-            'province_id' => '33',
-            'city_id' => '3301',
-            'district_id' => '330101',
-            'village_id' => '3301012001',
+            'province_id' => $refProvinceId,
+            'city_id' => $refCityId,
+            'district_id' => $refDistrictId,
+            'village_id' => $refVillageId,
             'area' => 0.75,
             'unit' => 'Hektar(Ha)',
             'status' => 'Bagi Hasil',
@@ -180,10 +189,10 @@ class FarmerSeeder extends Seeder
 
         $land4 = $farmer2->lands()->create([
             'land_name' => 'Kebun Cabai Belakang',
-            'province_id' => '33',
-            'city_id' => '3301',
-            'district_id' => '330101',
-            'village_id' => '3301012001',
+            'province_id' => $refProvinceId,
+            'city_id' => $refCityId,
+            'district_id' => $refDistrictId,
+            'village_id' => $refVillageId,
             'area' => 0.50,
             'unit' => 'Hektar(Ha)',
             'status' => 'Sewa',
@@ -214,7 +223,8 @@ class FarmerSeeder extends Seeder
                 'name' => 'Bapak Ari',
                 'password' => Hash::make('password123'),
                 'phone' => '083456789012',
-                'address' => 'Desa Sari RT 02/RW 03',
+                'address' => 'Dusun Sidomulyo RT 02/RW 03, Godean, Sleman',
+                'cooperative_id' => $refCooperativeId,
             ]
         );
         $user3->assignRole('petani');
@@ -223,20 +233,20 @@ class FarmerSeeder extends Seeder
             'user_id' => $user3->id,
             'farmer_group_id' => $group1->id,
             'nik' => '3301012106750003',
-            'province_id' => '33',
-            'city_id' => '3301',
-            'district_id' => '330101',
-            'village_id' => '3301012001',
+            'province_id' => $refProvinceId,
+            'city_id' => $refCityId,
+            'district_id' => $refDistrictId,
+            'village_id' => $refVillageId,
             'total_land_area' => 1.00,
             'notes' => 'Petani padi reguler.',
         ]);
 
         $land5 = $farmer3->lands()->create([
             'land_name' => 'Sawah Utama Ari',
-            'province_id' => '33',
-            'city_id' => '3301',
-            'district_id' => '330101',
-            'village_id' => '3301012001',
+            'province_id' => $refProvinceId,
+            'city_id' => $refCityId,
+            'district_id' => $refDistrictId,
+            'village_id' => $refVillageId,
             'area' => 1.00,
             'unit' => 'Hektar(Ha)',
             'status' => 'Milik Sendiri',
@@ -267,7 +277,8 @@ class FarmerSeeder extends Seeder
                 'name' => 'Bapak Ivan',
                 'password' => Hash::make('password123'),
                 'phone' => '084567890123',
-                'address' => 'Kp. Baru RT 01/RW 05',
+                'address' => 'Dusun Sidomulyo RT 01/RW 05, Godean, Sleman',
+                'cooperative_id' => $refCooperativeId,
             ]
         );
         $user4->assignRole('petani');
@@ -276,20 +287,20 @@ class FarmerSeeder extends Seeder
             'user_id' => $user4->id,
             'farmer_group_id' => $group2->id,
             'nik' => '3301011508880004',
-            'province_id' => '33',
-            'city_id' => '3301',
-            'district_id' => '330101',
-            'village_id' => '3301012001',
+            'province_id' => $refProvinceId,
+            'city_id' => $refCityId,
+            'district_id' => $refDistrictId,
+            'village_id' => $refVillageId,
             'total_land_area' => 0.50,
             'notes' => 'Petani jagung pakan ternak.',
         ]);
 
         $land6 = $farmer4->lands()->create([
             'land_name' => 'Sawah Ivan',
-            'province_id' => '33',
-            'city_id' => '3301',
-            'district_id' => '330101',
-            'village_id' => '3301012001',
+            'province_id' => $refProvinceId,
+            'city_id' => $refCityId,
+            'district_id' => $refDistrictId,
+            'village_id' => $refVillageId,
             'area' => 0.50,
             'unit' => 'Hektar(Ha)',
             'status' => 'Sewa',
@@ -320,7 +331,8 @@ class FarmerSeeder extends Seeder
                 'name' => 'Ibu Brokline',
                 'password' => Hash::make('password123'),
                 'phone' => '085678901234',
-                'address' => 'Dusun Bali RT 03/RW 04',
+                'address' => 'Dusun Sidomulyo RT 03/RW 04, Godean, Sleman',
+                'cooperative_id' => $refCooperativeId,
             ]
         );
         $user5->assignRole('petani');
@@ -329,20 +341,20 @@ class FarmerSeeder extends Seeder
             'user_id' => $user5->id,
             'farmer_group_id' => $group2->id,
             'nik' => '3301014402920005',
-            'province_id' => '33',
-            'city_id' => '3301',
-            'district_id' => '330101',
-            'village_id' => '3301012001',
+            'province_id' => $refProvinceId,
+            'city_id' => $refCityId,
+            'district_id' => $refDistrictId,
+            'village_id' => $refVillageId,
             'total_land_area' => 1.20,
             'notes' => 'Petani tanaman organik ramah lingkungan.',
         ]);
 
         $land7 = $farmer5->lands()->create([
             'land_name' => 'Kebun Semangka Brokline',
-            'province_id' => '33',
-            'city_id' => '3301',
-            'district_id' => '330101',
-            'village_id' => '3301012001',
+            'province_id' => $refProvinceId,
+            'city_id' => $refCityId,
+            'district_id' => $refDistrictId,
+            'village_id' => $refVillageId,
             'area' => 1.20,
             'unit' => 'Hektar(Ha)',
             'status' => 'Milik Sendiri',
@@ -365,7 +377,7 @@ class FarmerSeeder extends Seeder
 
 
         // ----------------------------------------------------
-        // PETANI 6: Bapak Slamet (Sleman, DIY — untuk testing Dinas Pertanian Sleman)
+        // PETANI 6: Bapak Slamet (Sleman, DIY — lokasi acuan)
         // ----------------------------------------------------
         $user6 = User::updateOrCreate(
             ['email' => 'slamet@email.com'],
@@ -374,6 +386,7 @@ class FarmerSeeder extends Seeder
                 'password' => Hash::make('password123'),
                 'phone' => '086789012345',
                 'address' => 'Dusun Sidomulyo RT 02/RW 03, Godean, Sleman',
+                'cooperative_id' => $refCooperativeId,
             ]
         );
         $user6->assignRole('petani');
@@ -382,20 +395,20 @@ class FarmerSeeder extends Seeder
             'user_id' => $user6->id,
             'farmer_group_id' => $group2->id,
             'nik' => '3404051205800006',
-            'province_id' => '34',
-            'city_id' => '3404',
-            'district_id' => '340402',
-            'village_id' => '3404022003', 
+            'province_id' => $refProvinceId,
+            'city_id' => $refCityId,
+            'district_id' => $refDistrictId,
+            'village_id' => $refVillageId,
             'total_land_area' => 0.80,
             'notes' => 'Petani padi di wilayah Sleman untuk uji coba filter Dinas Pertanian.',
         ]);
 
         $land8 = $farmer6->lands()->create([
             'land_name' => 'Sawah Sidomulyo',
-            'province_id' => '34',
-            'city_id' => '3404',
-            'district_id' => '340402',
-            'village_id' => '3404022003', 
+            'province_id' => $refProvinceId,
+            'city_id' => $refCityId,
+            'district_id' => $refDistrictId,
+            'village_id' => $refVillageId,
             'area' => 0.80,
             'unit' => 'Hektar(Ha)',
             'status' => 'Milik Sendiri',

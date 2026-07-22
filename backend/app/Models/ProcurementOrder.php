@@ -28,7 +28,8 @@ class ProcurementOrder extends Model
         'dinas_received_at',
         'completed_at',
         'rejection_reason',
-        'notes_from_verifier'
+        'notes_from_verifier',
+        'receipt_notes' // <-- TAMBAHKAN INI
     ];
 
     protected $casts = [
@@ -48,5 +49,10 @@ class ProcurementOrder extends Model
     public function items(): HasMany
     {
         return $this->hasMany(ProcurementOrderItem::class);
+    }
+
+    public function revisions()
+    {
+        return $this->hasMany(ProcurementOrderRevision::class);
     }
 }

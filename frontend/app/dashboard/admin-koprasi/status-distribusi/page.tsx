@@ -92,29 +92,98 @@ export default function StatusDistribusiPage() {
   }, []);
 
   const handleCompleteOrder = async (id: number) => {
-    const confirmResult = await Swal.fire({
-      title: "Konfirmasi Penerimaan Fisik",
-      text: "Apakah Anda yakin fisik pupuk sudah dibongkar total di gudang koperasi? Stok akan otomatis bertambah setelah ini.",
-      icon: "question",
+    const order = selectedOrder;
+    if (!order) return;
+
+    const totalBagsOrdered = Number(order?.total_bags_ordered || 1);
+
+    // SweetAlert Custom Form Input Verifikasi
+    const { value: formValues } = await Swal.fire({
+      title: "Verifikasi & Konfirmasi Penerimaan Fisik",
+      html: `
+      <p class="text-xs text-zinc-500 mb-4 text-left">
+        Periksa dan masukkan jumlah karung fisik yang benar-benar tiba di gudang Koperasi untuk pengadaan <b class="text-zinc-800">${order?.po_number ?? ""}</b>.
+      </p>
+      
+      <div class="text-left space-y-3 bg-zinc-50 p-4 rounded-2xl border border-zinc-100 text-xs">
+        <div class="flex justify-between pb-2 border-b border-zinc-200/60">
+          <span class="text-zinc-500 font-medium">Target Pengadaan:</span>
+          <span class="font-bold text-emerald-700">${totalBagsOrdered} Karung (${(Number(order?.total_weight_kg || 0) / 1000).toFixed(1)} Ton)</span>
+        </div>
+
+        <div>
+          <label class="block font-bold text-zinc-700 mb-1">
+            Jumlah Karung Diterima Fisik <span class="text-rose-500">*</span>
+          </label>
+          <input 
+            id="swal-input-bags" 
+            type="number" 
+            min="0"
+            value="${totalBagsOrdered}" 
+            class="w-full px-3 py-2 border border-zinc-300 rounded-xl font-bold text-sm text-zinc-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            placeholder="Masukkan jumlah karung"
+          />
+        </div>
+
+        <div>
+          <label class="block font-bold text-zinc-700 mb-1">
+            Catatan Kondisi / Selisih (Opsional)
+          </label>
+          <textarea 
+            id="swal-input-notes" 
+            rows="2"
+            class="w-full px-3 py-2 border border-zinc-300 rounded-xl text-xs text-zinc-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            placeholder="Contoh: Fisik karung dalam kondisi baik dan segel utuh..."
+          ></textarea>
+        </div>
+      </div>
+    `,
+      focusConfirm: false,
       showCancelButton: true,
-      confirmButtonText: "Ya, Sudah Diterima",
+      confirmButtonText: "Verifikasi & Selesai",
       cancelButtonText: "Batal",
-      confirmButtonColor: "#059669", // emerald-600
-      cancelButtonColor: "#a1a1aa", // zinc-400
+      confirmButtonColor: "#059669",
+      cancelButtonColor: "#a1a1aa",
       reverseButtons: true,
+      preConfirm: () => {
+        const inputBags = (
+          document.getElementById("swal-input-bags") as HTMLInputElement
+        ).value;
+        const inputNotes = (
+          document.getElementById("swal-input-notes") as HTMLTextAreaElement
+        ).value;
+
+        if (!inputBags || Number(inputBags) < 0) {
+          Swal.showValidationMessage(
+            "Harap masukkan jumlah karung fisik yang valid!",
+          );
+          return false;
+        }
+
+        return {
+          total_bags_received: Number(inputBags),
+          notes: inputNotes,
+        };
+      },
     });
 
-    if (!confirmResult.isConfirmed) return;
+    if (!formValues) return;
 
     try {
+      // Kirim data hasil verifikasi kuantitas ke backend
       const response = await api.post(
         `/cooperative/procurement/${id}/complete`,
+        {
+          total_bags_received: formValues.total_bags_received,
+          notes: formValues.notes,
+        },
       );
+
       if (response.data.success) {
         Toast.fire({
           icon: "success",
-          title: "Berhasil!",
-          text: response.data.message,
+          title: "Penerimaan Berhasil Diverifikasi!",
+          text: response.data.message || "Stok inventaris telah diperbarui.",
         });
         fetchOrderDetail(id);
         fetchOrders();
@@ -122,9 +191,10 @@ export default function StatusDistribusiPage() {
     } catch (err: any) {
       Toast.fire({
         icon: "error",
-        title: "Gagal",
+        title: "Gagal Memproses",
         text:
-          err.response?.data?.message || "Gagal memperbarui status pengiriman.",
+          err.response?.data?.message ||
+          "Gagal memperbarui verifikasi penerimaan.",
       });
     }
   };

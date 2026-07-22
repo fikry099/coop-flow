@@ -18,7 +18,8 @@ class CooperativeDashboardController extends Controller
     public function getKoperasiData(): JsonResponse
     {
         // 1. Ambil Koperasi ID dari User yang login
-        $cooperativeId = auth()->user()->cooperative_id ?? 1; 
+        $user = auth()->user();
+        $cooperativeId = $user->cooperative_id ?? 1; 
         
         // Ambil data kapasitas gudang riil dari model Cooperative
         $cooperative = Cooperative::find($cooperativeId);
@@ -28,20 +29,44 @@ class CooperativeDashboardController extends Controller
         $startOfMonth = Carbon::now()->startOfMonth();
 
         // ==========================================
-        // 1. AGREGASI METRIK (WIDGET UTAMA)
+        // 1. QUERY DASAR PETANI TERFILTER
         // ==========================================
-        $totalPetani = Farmer::count(); 
-        $petaniBulanLalu = Farmer::where('created_at', '<', $startOfMonth)->count();
+        // Menyesuaikan logika filter dari FarmerController (Petani berdasarkan cooperative_id di tabel User)
+        $farmerQuery = Farmer::whereHas('user', function ($q) use ($cooperativeId) {
+            $q->where('cooperative_id', $cooperativeId);
+        });
+
+        // ==========================================
+        // 2. AGREGASI METRIK (WIDGET UTAMA)
+        // ==========================================
+        // Metrik Petani (Terfilter Koperasi)
+        $totalPetani = (clone $farmerQuery)->count(); 
+        $petaniBulanLalu = (clone $farmerQuery)->where('created_at', '<', $startOfMonth)->count();
         $kenaikanPetani = $totalPetani - $petaniBulanLalu;
 
-        $totalLahan = Land::sum('area');
-        $tanamanAktif = Plant::count(); 
-        $transaksiMasukNominal = Transaction::whereDate('created_at', $today)->sum('amount_paid');
+        // Metrik Lahan & Tanaman (Hanya lahan milik petani koperasi ini)
+        $totalLahan = Land::whereHas('farmer.user', function ($q) use ($cooperativeId) {
+            $q->where('cooperative_id', $cooperativeId);
+        })->sum('area');
+
+        $tanamanAktif = Plant::whereHas('land.farmer.user', function ($q) use ($cooperativeId) {
+            $q->where('cooperative_id', $cooperativeId);
+        })->count(); 
+
+        // Metrik Transaksi & Stok
+        $transaksiMasukNominal = Transaction::whereHas('items.fertilizer', function ($q) use ($cooperativeId) {
+                $q->where('cooperative_id', $cooperativeId);
+            })
+            ->whereDate('created_at', $today)
+            ->sum('amount_paid');
 
         $totalStokKg = Fertilizer::where('cooperative_id', $cooperativeId)->sum('current_stock_kg');
         $totalStokTon = round($totalStokKg / 1000, 2);
 
-        $permintaanHariIniKarung = TransactionItem::whereHas('transaction', function($q) use ($today) {
+        $permintaanHariIniKarung = TransactionItem::whereHas('fertilizer', function($q) use ($cooperativeId) {
+                $q->where('cooperative_id', $cooperativeId);
+            })
+            ->whereHas('transaction', function($q) use ($today) {
                 $q->whereDate('created_at', $today);
             })
             ->join('fertilizers', 'transaction_items.fertilizer_id', '=', 'fertilizers.id')
@@ -49,7 +74,7 @@ class CooperativeDashboardController extends Controller
             ->value('total_karung') ?? 0;
 
         // ==========================================
-        // 2. PREDIKSI KEBUTUHAN PUPUK (AI SECTION)
+        // 3. PREDIKSI KEBUTUHAN PUPUK (AI SECTION)
         // ==========================================
         $aiPredictions = AiPrediction::with('fertilizer:id,name')
             ->where('cooperative_id', $cooperativeId)
@@ -106,7 +131,7 @@ class CooperativeDashboardController extends Controller
         })->values();
 
         // ==========================================
-        // 4. KONDISI STOK GUDANG BULAN INI (BAR CHART KANAN)
+        // 5. KONDISI STOK GUDANG BULAN INI (BAR CHART KANAN)
         // ==========================================
         $colorPalettes = ['#22c55e', '#1e3a8a', '#a21caf', '#eab308', '#f97316', '#06b6d4'];
         $stokGudangBulanIni = Fertilizer::where('cooperative_id', $cooperativeId)
@@ -156,7 +181,7 @@ class CooperativeDashboardController extends Controller
             });
 
         // ==========================================
-        // 6. KONDISI STOK GUDANG UTAMA (TABEL UTAMA)
+        // 7. KONDISI STOK GUDANG UTAMA (TABEL UTAMA)
         // ==========================================
         $stokGudang = Fertilizer::where('cooperative_id', $cooperativeId)->get()->map(function ($item) use ($kapasitasGudangTon) {
             $status = 'Aman';

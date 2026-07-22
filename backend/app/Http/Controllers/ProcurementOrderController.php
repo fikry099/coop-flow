@@ -4,11 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\ProcurementOrder;
 use App\Models\ProcurementOrderItem;
+use App\Models\ProcurementOrderRevision;
+use App\Models\InventoryMutation;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use App\Models\InventoryMutation;
 
 class ProcurementOrderController extends Controller
 {
@@ -19,41 +20,35 @@ class ProcurementOrderController extends Controller
     const DRIVER_REST_DURATION_HOURS = 9; 
     const PORT_BUFFER_HOURS = 6;      
 
+    /**
+     * 🟢 Status "logis" yang dianggap setara untuk kontrol akses/antrean.
+     */
+    const KEMENKO_QUEUE_STATUSES = ['PENDING_KEMENKO', 'PENDING_KEMENKO_ADJUSTED'];
+    const APPROVED_STATUSES = ['APPROVED', 'APPROVED_ADJUSTED'];
 
-
-/**
+    /**
      * MENAMPILKAN SEMUA DATA PO (INDEX)
-     * Otomatis memfilter data berdasarkan peran user yang sedang login
      */
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
         
-        // Menggunakan 'province' dan 'city_koor' sesuai skema tabel cooperatives Anda
         $query = ProcurementOrder::with(['cooperative:id,name,province,city_koor']);
 
-        /**
-         * KONTROL AKSES OTOMATIS BERDASARKAN ROLE USER
-         * 1. Jika Petugas Koperasi: Hanya melihat PO miliknya sendiri
-         * 2. Jika Dinas Pertanian: Melihat PO dari koperasi yang kota/kabupatennya cocok
-         * 3. Jika Kemenko: Hanya melihat PO yang sudah lolos validasi Dinas Pertanian
-         */
         if ($user->hasRole('petugas-koperasi') || isset($user->cooperative_id)) {
             $query->where('cooperative_id', $user->cooperative_id);
         } elseif ($user->hasRole('dinas-pertanian')) {
             $query->whereHas('cooperative', function ($q) use ($user) {
-                // PERBAIKAN: Menggunakan $user->city_code sesuai dengan tabel users yang baru
                 $q->whereRaw('LOWER(city_koor) = ?', [strtolower($user->city_code)]);
             });
         } elseif ($user->hasRole('kemenko')) {
-            $query->whereIn('status_verifikasi', [
-                'PENDING_KEMENKO',
-                'APPROVED',
-                'REJECTED_KEMENKO',
-            ]);
+            $query->whereIn('status_verifikasi', array_merge(
+                self::KEMENKO_QUEUE_STATUSES,
+                self::APPROVED_STATUSES,
+                ['REJECTED_KEMENKO']
+            ));
         }
 
-        // Urutkan berdasarkan PO terbaru yang diajukan
         $orders = $query->orderBy('created_at', 'desc')->get();
 
         return response()->json([
@@ -65,16 +60,17 @@ class ProcurementOrderController extends Controller
 
     /**
      * MENAMPILKAN DETAIL DATA PO TERTENTU (SHOW)
-     * Mengambil struktur dokumen induk lengkap beserta seluruh rincian item pupuknya
      */
     public function show(Request $request, $id): JsonResponse
     {
         $user = $request->user();
 
-        // Mengambil data PO beserta koperasi dan seluruh daftar item detailnya
         $order = ProcurementOrder::with([
             'cooperative', 
-            'items.fertilizer' // Mengambil detail pupuk per item jika dibutuhkan gambarnya
+            'items.fertilizer',
+            'revisions' => function ($q) {
+                $q->with('revisedBy:id,name')->orderBy('created_at', 'desc');
+            },
         ])->find($id);
 
         if (!$order) {
@@ -84,7 +80,6 @@ class ProcurementOrderController extends Controller
             ], 404);
         }
 
-        // Proteksi Tambahan: Memastikan Koperasi tidak bisa mengintip PO milik Koperasi lain
         if (($user->hasRole('petugas-koperasi') || isset($user->cooperative_id)) && $order->cooperative_id !== $user->cooperative_id) {
             return response()->json([
                 'success' => false,
@@ -101,7 +96,6 @@ class ProcurementOrderController extends Controller
 
     /**
      * STAGE 1: SUBMIT OLEH KOPERASI KDMP
-     * Mengunci rekomendasi AI dari DRAFT menjadi PROCESSED saat PO dibuat
      */
     public function store(Request $request): JsonResponse
     {
@@ -134,7 +128,6 @@ class ProcurementOrderController extends Controller
         try {
             $poNumber = 'PO-' . now()->format('Ymd') . '-' . strtoupper(Str::random(5));
 
-            // 1. Buat Induk Dokumen PO
             $order = ProcurementOrder::create([
                 'cooperative_id' => $cooperativeId,
                 'po_number' => $poNumber,
@@ -148,14 +141,11 @@ class ProcurementOrderController extends Controller
             $totalCost = 0;
             $itemCount = 0;
 
-            // Proses semua item kiriman request untuk memperbarui status ai_predictions secara adil
             foreach ($request->items as $item) {
-                
                 if ($item['final_bags_ordered'] > 0) {
                     $itemWeight = $item['final_bags_ordered'] * $item['packaging_size_kg'];
                     $itemSubtotal = $item['final_bags_ordered'] * $item['harga_per_karung'];
 
-                    // 2. Buat Item Detail PO (hanya yang dipesan)
                     ProcurementOrderItem::create([
                         'procurement_order_id' => $order->id,
                         'fertilizer_id' => $item['fertilizer_id'],
@@ -175,7 +165,6 @@ class ProcurementOrderController extends Controller
                     $totalCost += $itemSubtotal;
                     $itemCount++;
 
-                    // SINKRONISASI AI: Kunci status menjadi PROCESSED karena dibeli
                     DB::table('ai_predictions')
                         ->where('cooperative_id', $cooperativeId)
                         ->where('fertilizer_id', $item['fertilizer_id'])
@@ -185,7 +174,6 @@ class ProcurementOrderController extends Controller
                             'updated_at' => now()
                         ]);
                 } else {
-                    // SINKRONISASI AI: Ubah ke SKIPPED karena diabaikan/tidak dipesan oleh koperasi pada periode ini
                     DB::table('ai_predictions')
                         ->where('cooperative_id', $cooperativeId)
                         ->where('fertilizer_id', $item['fertilizer_id'])
@@ -197,7 +185,6 @@ class ProcurementOrderController extends Controller
                 }
             }
 
-            // 3. Update nilai agregat pada tabel induk PO
             $order->update([
                 'total_items' => $itemCount,
                 'total_bags_ordered' => $totalBags,
@@ -220,28 +207,45 @@ class ProcurementOrderController extends Controller
     public function verifyByDinas(Request $request, $id): JsonResponse
     {
         $request->validate([
-            'action' => 'required|in:APPROVE,REJECT',
+            'action' => 'required|in:APPROVE,REJECT,ADJUST',
             'rejection_reason' => 'required_if:action,REJECT|string|nullable',
+            'adjustment_reason' => 'required_if:action,ADJUST|string|nullable',
+            'items' => 'required_if:action,ADJUST|array|min:1',
+            'items.*.id' => 'required_if:action,ADJUST|integer|exists:procurement_order_items,id',
+            'items.*.final_bags_ordered' => 'required_if:action,ADJUST|integer|min:0',
             'notes' => 'string|nullable'
         ]);
 
         $order = ProcurementOrder::findOrFail($id);
 
-        if ($request->action === 'APPROVE') {
-            $order->update([
-                'status_verifikasi' => 'PENDING_KEMENKO',
-                'notes_from_verifier' => $request->notes
-            ]);
-            $msg = 'Dokumen disetujui Dinas Pertanian & diteruskan ke Kemenko.';
-        } else {
+        if ($order->status_verifikasi !== 'PENDING_DINAS') {
+            return response()->json(['success' => false, 'message' => 'Status dokumen tidak valid untuk verifikasi Dinas.'], 400);
+        }
+
+        if ($request->action === 'REJECT') {
             $order->update([
                 'status_verifikasi' => 'REJECTED_DINAS',
                 'rejection_reason' => $request->rejection_reason
             ]);
-            $msg = 'Dokumen pengadaan ditolak oleh Dinas Pertanian.';
+            return response()->json(['success' => true, 'message' => 'Dokumen pengadaan ditolak oleh Dinas Pertanian.']);
         }
 
-        return response()->json(['success' => true, 'message' => $msg]);
+        if ($request->action === 'ADJUST') {
+            return $this->applyAdjustment(
+                order: $order,
+                request: $request,
+                stage: 'DINAS',
+                nextStatus: 'PENDING_KEMENKO_ADJUSTED',
+                successMessage: 'Dinas Pertanian menyesuaikan jumlah pengadaan & meneruskannya ke Kemenko.'
+            );
+        }
+
+        $order->update([
+            'status_verifikasi' => 'PENDING_KEMENKO',
+            'notes_from_verifier' => $request->notes
+        ]);
+
+        return response()->json(['success' => true, 'message' => 'Dokumen disetujui Dinas Pertanian & diteruskan ke Kemenko.']);
     }
 
     /**
@@ -250,14 +254,18 @@ class ProcurementOrderController extends Controller
     public function approveByKemenko(Request $request, $id): JsonResponse
     {
         $request->validate([
-            'action' => 'required|in:APPROVE,REJECT',
+            'action' => 'required|in:APPROVE,REJECT,ADJUST',
             'rejection_reason' => 'required_if:action,REJECT|string|nullable',
+            'adjustment_reason' => 'required_if:action,ADJUST|string|nullable',
+            'items' => 'required_if:action,ADJUST|array|min:1',
+            'items.*.id' => 'required_if:action,ADJUST|integer|exists:procurement_order_items,id',
+            'items.*.final_bags_ordered' => 'required_if:action,ADJUST|integer|min:0',
             'notes' => 'string|nullable'
         ]);
 
         $order = ProcurementOrder::findOrFail($id);
 
-        if ($order->status_verifikasi !== 'PENDING_KEMENKO') {
+        if (!in_array($order->status_verifikasi, self::KEMENKO_QUEUE_STATUSES)) {
             return response()->json(['success' => false, 'message' => 'Status dokumen tidak valid untuk verifikasi Kemenko.'], 400);
         }
 
@@ -267,6 +275,17 @@ class ProcurementOrderController extends Controller
                 'rejection_reason' => $request->rejection_reason
             ]);
             return response()->json(['success' => true, 'message' => 'Dokumen pengadaan resmi ditolak oleh Kemenko.']);
+        }
+
+        if ($request->action === 'ADJUST') {
+            return $this->applyAdjustment(
+                order: $order,
+                request: $request,
+                stage: 'KEMENKO',
+                nextStatus: 'APPROVED_ADJUSTED',
+                successMessage: 'Kemenko menyesuaikan alokasi kuota pengadaan. Nilai baru dikunci & diteruskan ke PT Pupuk Indonesia untuk persiapan logistik.',
+                extraUpdates: ['status_logistik' => 'NONE']
+            );
         }
 
         $order->update([
@@ -282,13 +301,114 @@ class ProcurementOrderController extends Controller
     }
 
     /**
-     * STAGE 3B: RILIS PENGIRIMAN LOGISTIK OLEH KEMENKO (Integrasi Rantai Pasok Maritim & Hambatan Riil)
+     * HELPER BERSAMA: Menerapkan penyesuaian (ADJUST) item PO
+     */
+    private function applyAdjustment(
+        ProcurementOrder $order,
+        Request $request,
+        string $stage,
+        string $nextStatus,
+        string $successMessage,
+        array $extraUpdates = []
+    ): JsonResponse {
+        DB::beginTransaction();
+        try {
+            $order->load('items');
+
+            $itemsBefore = $order->items->map(function ($item) {
+                return $item->only([
+                    'id', 'fertilizer_id', 'fertilizer_name',
+                    'final_bags_ordered', 'final_weight_kg',
+                    'packaging_size_kg', 'price_per_kg',
+                    'harga_per_karung', 'subtotal_price',
+                ]);
+            })->toArray();
+
+            $totalsBefore = [
+                'total_bags_ordered' => $order->total_bags_ordered,
+                'total_weight_kg' => $order->total_weight_kg,
+                'total_estimated_cost' => $order->total_estimated_cost,
+            ];
+
+            foreach ($request->items as $revisedItem) {
+                $item = $order->items->firstWhere('id', $revisedItem['id']);
+
+                if (!$item) continue;
+
+                $newBags = (int) $revisedItem['final_bags_ordered'];
+                $newWeight = $newBags * $item->packaging_size_kg;
+                $newSubtotal = $newBags * $item->harga_per_karung;
+
+                $item->update([
+                    'final_bags_ordered' => $newBags,
+                    'final_weight_kg' => $newWeight,
+                    'subtotal_price' => $newSubtotal,
+                ]);
+            }
+
+            $order->load('items');
+            $totalBags = $order->items->sum('final_bags_ordered');
+            $totalKg = $order->items->sum('final_weight_kg');
+            $totalCost = $order->items->sum('subtotal_price');
+
+            $itemsAfter = $order->items->map(function ($item) {
+                return $item->only([
+                    'id', 'fertilizer_id', 'fertilizer_name',
+                    'final_bags_ordered', 'final_weight_kg',
+                    'packaging_size_kg', 'price_per_kg',
+                    'harga_per_karung', 'subtotal_price',
+                ]);
+            })->toArray();
+
+            $totalsAfter = [
+                'total_bags_ordered' => $totalBags,
+                'total_weight_kg' => $totalKg,
+                'total_estimated_cost' => $totalCost,
+            ];
+
+            ProcurementOrderRevision::create([
+                'procurement_order_id' => $order->id,
+                'stage' => $stage,
+                'revised_by_user_id' => $request->user()?->id,
+                'reason' => $request->adjustment_reason,
+                'items_before' => $itemsBefore,
+                'items_after' => $itemsAfter,
+                'totals_before' => $totalsBefore,
+                'totals_after' => $totalsAfter,
+            ]);
+
+            $order->update(array_merge([
+                'status_verifikasi' => $nextStatus,
+                'total_bags_ordered' => $totalBags,
+                'total_weight_kg' => $totalKg,
+                'total_estimated_cost' => $totalCost,
+                'notes_from_verifier' => $request->adjustment_reason,
+            ], $extraUpdates));
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => $successMessage,
+                'data' => $order->fresh('items')
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal memproses penyesuaian pengadaan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * STAGE 3B: RILIS PENGIRIMAN LOGISTIK OLEH KEMENKO
      */
     public function dispatchShipmentByKemenko($id): JsonResponse
     {
         $order = ProcurementOrder::with('cooperative')->findOrFail($id);
 
-        if ($order->status_verifikasi !== 'APPROVED' || $order->status_logistik !== 'NONE') {
+        if (!in_array($order->status_verifikasi, self::APPROVED_STATUSES) || $order->status_logistik !== 'NONE') {
             return response()->json(['success' => false, 'message' => 'Logistik tidak dapat dirilis.'], 400);
         }
 
@@ -367,19 +487,65 @@ class ProcurementOrderController extends Controller
 
     /**
      * STAGE 4: DINAS PERTANIAN KLIK SAAT PUPUK TIBA DI KABUPATEN
+     * 🟢 Ditingkatkan untuk mencatat jumlah fisik diterima & catatan Berita Acara penerimaan
      */
-    public function updateToLiniTiga($id): JsonResponse
+    public function updateToLiniTiga(Request $request, $id): JsonResponse
     {
-        $order = ProcurementOrder::findOrFail($id);
-        
-        $order->update([
-            'status_logistik' => 'GUDANG_LINI_3',
-            'dinas_received_at' => now()
+        $request->validate([
+            'items' => 'nullable|array',
+            'items.*.id' => 'required_with:items|integer|exists:procurement_order_items,id',
+            'items.*.actual_received_bags' => 'required_with:items|integer|min:0',
+            'receipt_notes' => 'nullable|string',
         ]);
 
-        return response()->json(['success' => true, 'message' => 'Dinas mengonfirmasi pupuk telah tiba di Lini 3 Kabupaten & siap dirilis jatah tebusnya.']);
+        $order = ProcurementOrder::with('items')->findOrFail($id);
+
+        if ($order->status_logistik !== 'PROD_LINI_1_2') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Status logistik tidak valid untuk penerimaan di Lini 3.'
+            ], 400);
+        }
+
+        DB::beginTransaction();
+        try {
+            // Update jumlah fisik diterima per item (jika dikirim oleh frontend)
+            if ($request->has('items') && is_array($request->items)) {
+                foreach ($request->items as $itemData) {
+                    $item = $order->items->firstWhere('id', $itemData['id']);
+                    if ($item) {
+                        $item->update([
+                            'actual_received_bags' => $itemData['actual_received_bags']
+                        ]);
+                    }
+                }
+            }
+
+            $order->update([
+                'status_logistik' => 'GUDANG_LINI_3',
+                'dinas_received_at' => now(),
+                'receipt_notes' => $request->receipt_notes ?? $order->receipt_notes,
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true, 
+                'message' => 'Dinas mengonfirmasi pupuk telah tiba di Lini 3 Kabupaten & catatan fisik berhasil disimpan.',
+                'data' => $order->fresh('items')
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengonfirmasi penerimaan Lini 3: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
+    /**
+     * MELEPAS JATAH TEBUS KE LINI 4
+     */
     public function releaseToLiniEmpat($id): JsonResponse
     {
         $order = ProcurementOrder::findOrFail($id);
@@ -393,7 +559,7 @@ class ProcurementOrderController extends Controller
 
     /**
      * STAGE 5: KOPERASI KLIK SAAT FISIK PUPUK SUDAH BONGKAR DI GUDANG KDMP
-     * Menambahkan stok ke tabel fertilizers & mencatat riwayat mutasi masuk
+     * 🟢 Ditingkatkan agar penambahan stok menggunakan actual_received_bags
      */
     public function completeOrder($id): JsonResponse
     {
@@ -409,18 +575,22 @@ class ProcurementOrderController extends Controller
         DB::beginTransaction();
         try {
             foreach ($order->items as $item) {
-                // 1. Tambahkan stok ke tabel fertilizers
+                // Gunakan actual_received_bags jika diisi oleh Dinas, jika tidak fallback ke final_bags_ordered
+                $receivedBags = $item->actual_received_bags ?? $item->final_bags_ordered;
+                $receivedWeightKg = $receivedBags * $item->packaging_size_kg;
+
+                // 1. Tambahkan stok ke tabel fertilizers berdasarkan jumlah fisik riil
                 DB::table('fertilizers')
                     ->where('id', $item->fertilizer_id)
-                    ->increment('current_stock_kg', $item->final_weight_kg);
+                    ->increment('current_stock_kg', $receivedWeightKg);
 
                 // 2. Catat riwayat mutasi masuk 
                 InventoryMutation::create([
                     'fertilizer_id' => $item->fertilizer_id,
                     'farmer_id' => null,
                     'type' => 'masuk',
-                    'quantity_kg' => (int) $item->final_weight_kg,  // ← cast ke integer
-                    'description' => 'Penerimaan pengadaan PO ' . $order->po_number,
+                    'quantity_kg' => (int) $receivedWeightKg,
+                    'description' => 'Penerimaan pengadaan PO ' . $order->po_number . ' (' . $receivedBags . ' karung)',
                 ]);
             }
 

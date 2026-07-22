@@ -14,6 +14,7 @@ class ProcurementOrderItem extends Model
         'ai_suggested_bags',
         'ai_suggested_kg',
         'final_bags_ordered',
+        'actual_received_bags', // <-- TAMBAHKAN INI
         'final_weight_kg',
         'packaging_size_kg',
         'price_per_kg',

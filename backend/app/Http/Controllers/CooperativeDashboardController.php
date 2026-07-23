@@ -12,7 +12,6 @@ use App\Models\AiPrediction;
 use App\Models\Cooperative;
 use Illuminate\Http\JsonResponse;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
 
 class CooperativeDashboardController extends Controller
 {
@@ -90,7 +89,7 @@ class CooperativeDashboardController extends Controller
             });
 
         // ==========================================
-        // 4. TREN STOK & DISTRIBUSI (6 BULAN TERAKHIR)
+        // 3. TREN STOK & DISTRIBUSI (6 BULAN TERAKHIR)
         // ==========================================
         $monthsRange = collect(range(6, 0))->reverse(); 
 
@@ -158,30 +157,26 @@ class CooperativeDashboardController extends Controller
             ->values();
 
         // ==========================================
-        // 6. PETA SEBARAN (DIFILTER BERDASARKAN KOPERASI PETANI)
+        // PETA SEBARAN (DARI KOLOM POLYGON_COORDINATES)
         // ==========================================
-        $petaSebaran = Land::select('id', 'land_name', 'center_latitude', 'center_longitude', 'area')
-            ->whereHas('farmer.user', function ($q) use ($cooperativeId) {
-                $q->where('cooperative_id', $cooperativeId);
-            })
-            ->whereNotNull('center_latitude')
-            ->whereNotNull('center_longitude')
+        $petaSebaran = Land::with(['farmer.user']) // Cukup load relasi farmer.user
+            ->select('id', 'farmer_id', 'land_name', 'center_latitude', 'center_longitude', 'area', 'polygon_coordinates')
             ->get()
             ->map(function ($land) {
                 $statusKebutuhan = $land->area > 2.0 ? 'Tinggi' : ($land->area > 1.0 ? 'Sedang' : 'Rendah');
 
                 return [
-                    'type' => 'Feature',
-                    'properties' => [
-                        'land_id' => $land->id,
-                        'name' => $land->land_name,
-                        'area' => (float)$land->area,
-                        'kebutuhan' => $statusKebutuhan
+                    'land_id' => $land->id,
+                    'name' => $land->land_name,
+                    'farmer_name' => $land->farmer->user->name ?? ($land->farmer->name ?? 'Petani'),
+                    'area' => (float)$land->area,
+                    'kebutuhan' => $statusKebutuhan,
+                    'center' => [
+                        (float)$land->center_latitude,
+                        (float)$land->center_longitude
                     ],
-                    'geometry' => [
-                        'type' => 'Point',
-                        'coordinates' => [(float)$land->center_longitude, (float)$land->center_latitude]
-                    ]
+                    // Ambil langsung dari atribut model (sudah otomatis berbentuk Array)
+                    'polygon_coordinates' => $land->polygon_coordinates ?? []
                 ];
             });
 
@@ -212,7 +207,7 @@ class CooperativeDashboardController extends Controller
         });
 
         // ==========================================
-        // 8. AKTIVITAS TERBARU (TRANSAKSI PETANI TERFILTER)
+        // 7. AKTIVITAS TERBARU
         // ==========================================
         $aktivitasTerbaru = Transaction::with(['farmer', 'items.fertilizer'])
             ->whereHas('items.fertilizer', function($q) use ($cooperativeId) {
@@ -259,7 +254,7 @@ class CooperativeDashboardController extends Controller
             ->values();
 
         // ==========================================
-        // JSON RESPONSE COMPLETE
+        // JSON RESPONSE
         // ==========================================
         return response()->json([
             'success' => true,

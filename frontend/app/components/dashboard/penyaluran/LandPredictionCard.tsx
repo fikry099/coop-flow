@@ -23,11 +23,13 @@ export interface CustomFertilizerItem {
   fungsi: string;
   price_per_kg: number;
   harga_per_karung: number;
+  total_recommended_kg: number;
   jumlah_karung: number;
   packaging_size_kg: number;
   original_recommended_kg: number;
   original_recommended_bags: number;
   image_url: string | null;
+  formatted_text?: string;
   is_ml?: boolean;
   analysis_meta?: FertilizerAnalysisMeta;
 }
@@ -49,7 +51,7 @@ export interface CustomizedBagOutput {
   subtotal: number;
   isChecked: boolean;
   image_url: string | null;
-  fertilizer_id?: number; // Wajib ter-eksport di interface output ini
+  fertilizer_id?: number; 
 }
 
 interface LandPredictionCardProps {

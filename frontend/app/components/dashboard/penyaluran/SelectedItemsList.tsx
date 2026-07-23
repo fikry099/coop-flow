@@ -49,9 +49,23 @@ export default function SelectedItemsList({
           {activeBags.map((bag, idx) => {
             const validImageUrl = getImageUrl(bag.image_url);
             const defaultPackSize = bag.packaging_size_kg || 50;
-            const isEceran = bag.weightKg < defaultPackSize;
+
+            // KALKULASI DINAMIS JUMLAH KARUNG & ECERAN
+            const fullBags = Math.floor(bag.weightKg / defaultPackSize);
+            const remainderKg = Number((bag.weightKg % defaultPackSize).toFixed(2));
+            const isEceran = fullBags === 0 && remainderKg > 0;
+
+            // Keterangan teks jumlah karung (e.g. "2 Karung", "2 Karung + 10 Kg", "10 Kg")
+            let bagQuantityDisplay = "";
+            if (fullBags > 0 && remainderKg > 0) {
+              bagQuantityDisplay = `${fullBags} Karung + ${remainderKg} Kg`;
+            } else if (fullBags > 0) {
+              bagQuantityDisplay = `${fullBags} Karung`;
+            } else {
+              bagQuantityDisplay = `${bag.weightKg} Kg`;
+            }
             
-            // Generate Key yang benar-benar unik untuk menghindari tabrakan render state
+            // Generate Key unik
             const uniqueReactKey = `bag-${bag.land_id}-${bag.fertilizer_id}-${idx}`;
 
             return (
@@ -59,12 +73,12 @@ export default function SelectedItemsList({
                 <div className="flex items-center gap-3">
                   <span className="font-bold text-gray-400 w-4">{idx + 1}</span>
                   
-                  <div className="w-10 h-10 bg-gray-50 rounded-xl border border-gray-150 flex items-center justify-center overflow-hidden shrink-0 relative">
+                  <div className="w-16 h-16 bg-gray-50 rounded-xl  flex items-center justify-center overflow-hidden shrink-0 relative">
                     {validImageUrl ? (
                       <img 
                         src={validImageUrl} 
                         alt={bag.nama} 
-                        className="w-full h-full object-contain p-1 animate-in fade-in duration-200" 
+                        className="w-full h-full object-contain animate-in fade-in duration-200" 
                         onError={(e) => {
                           (e.target as HTMLImageElement).src = "https://placehold.co/100x120/a7f3d0/065f46?text=PUPUK";
                         }}
@@ -93,8 +107,9 @@ export default function SelectedItemsList({
                 </div>
                 
                 <div className="text-right">
+                  {/* TAMPILAN DINAMIS HASIL KALKULASI */}
                   <p className="font-bold text-zinc-700">
-                    {isEceran ? `${bag.weightKg} Kg` : "1 Karung"}
+                    {bagQuantityDisplay}
                   </p>
                   <p className="font-extrabold text-[#115e59] mt-0.5">Rp {bag.subtotal.toLocaleString("id-ID")}</p>
                 </div>

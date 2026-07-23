@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { FaTimes, FaSearch, FaRobot, FaBoxes, FaSpinner } from "react-icons/fa";
+import { FaTimes, FaSearch, FaRobot, FaBoxes, FaSpinner, FaExchangeAlt } from "react-icons/fa";
 import { CustomFertilizerItem } from "./LandPredictionCard";
 import api from "@/app/lib/axios";
 
@@ -13,6 +13,11 @@ interface FertilizerSwapModalProps {
   recommendations: CustomFertilizerItem[];
   onSelectType: (item: CustomFertilizerItem) => void; 
   baseUrl?: string;
+  /**
+   * (Opsional) Total Kg kebutuhan saat ini dari parent component
+   * Digunakan untuk mengkalkulasi konversi "Berapa Karung + Berapa Kg" secara real-time
+   */
+  currentTotalKg?: number; 
 }
 
 export default function FertilizerSwapModal({
@@ -23,6 +28,7 @@ export default function FertilizerSwapModal({
   recommendations,
   onSelectType,
   baseUrl = "http://localhost:8000",
+  currentTotalKg,
 }: FertilizerSwapModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"ai" | "all">("ai");
@@ -44,26 +50,25 @@ export default function FertilizerSwapModal({
       if (response.data && response.data.success) {
         const rawData = response.data.data || [];
         
-        // SINKRONISASI SCHEMA: sesuaikan mapping ke tipe CustomFertilizerItem
+        // MAPPING SINKRONISASI DATA DARI BACKEND
         const mappedData: CustomFertilizerItem[] = rawData.map((item: any) => {
           const packSize = item.packaging_size_kg || 50;
-          const pricePerKg = item.price_per_kg || 3000;
+          const pricePerKg = item.price_per_kg || (item.harga_per_karung ? Math.round(item.harga_per_karung / packSize) : 3000);
           const defaultBags = item.jumlah_karung || 1;
           const defaultKg = packSize * defaultBags;
           
           return {
-            // Pastikan ID diubah menjadi string agar seragam dengan data rekomendasi
             id: item.id ? String(item.id) : null,
             fertilizer_id: item.id ? Number(item.id) : null,
-            fertilizer_code: item.fertilizer_code || item.name?.split(' ')[0] || "NPK",
+            fertilizer_code: item.fertilizer_code || item.name?.split(' ')[0] || "PUPUK",
             nama: item.name || `Pupuk ${item.fertilizer_code || 'Custom'}`,
             fungsi: item.fungsi || `Pupuk berkualitas tinggi kemasan ${packSize} Kg.`,
             price_per_kg: pricePerKg,
-            // Sesuaikan properti harga menjadi harga_per_karung
             harga_per_karung: item.harga_per_karung || item.harga || (pricePerKg * packSize) || 150000,
             jumlah_karung: defaultBags,
             packaging_size_kg: packSize,
             original_recommended_kg: defaultKg,
+            total_recommended_kg: item.total_recommended_kg || defaultKg,
             original_recommended_bags: defaultBags,
             image_url: item.image || item.image_url || null,
             is_ml: false
@@ -102,7 +107,7 @@ export default function FertilizerSwapModal({
               Pilih Pupuk Pengganti
             </h3>
             <p className="text-[10px] text-gray-400 font-semibold mt-0.5">
-              Mengganti isi untuk Karung Ke-{bagIndex}
+              Mengganti jenis pupuk untuk alokasi lahan ini
             </p>
           </div>
           <button 
@@ -175,10 +180,9 @@ export default function FertilizerSwapModal({
               {filteredOptions.map((item) => {
                 const isSelected = selectedType.toLowerCase() === item.fertilizer_code?.toLowerCase();
                 
-                // Ambil gambar yang bersih
+                // Formatter URL Gambar
                 const rawPath = item.image_url;
                 let computedImageUrl = "https://placehold.co/100x120/a7f3d0/065f46?text=PUPUK";
-                
                 if (rawPath) {
                   if (rawPath.startsWith("http://") || rawPath.startsWith("https://")) {
                     computedImageUrl = rawPath;
@@ -188,12 +192,20 @@ export default function FertilizerSwapModal({
                   }
                 }
 
-                // Gunakan properti harga_per_karung sesuai interface terbaru
                 const finalPrice = item.harga_per_karung && item.harga_per_karung > 0 ? item.harga_per_karung : 150000;
                 const finalWeight = item.packaging_size_kg || 50;
                 const calculatedPricePerKg = item.price_per_kg && item.price_per_kg > 0 
                   ? item.price_per_kg 
                   : Math.round(finalPrice / finalWeight);
+
+                // --- HITUNG HASIL PERUBAHAN KARUNG & KG AGAR TERDATA ---
+                const targetKgToConvert = currentTotalKg ?? item.total_recommended_kg ?? item.original_recommended_kg ?? 50;
+                const convertedBagsCount = Math.floor(targetKgToConvert / finalWeight);
+                const convertedExtraKg = Number((targetKgToConvert % finalWeight).toFixed(2));
+                
+                const conversionText = convertedExtraKg > 0 
+                  ? `${convertedBagsCount} Karung + ${convertedExtraKg} Kg`
+                  : `${convertedBagsCount} Karung`;
 
                 return (
                   <div 
@@ -204,16 +216,34 @@ export default function FertilizerSwapModal({
                         : "border-gray-200/80 hover:border-gray-300 hover:shadow-xs"
                     }`}
                   >
+                    {/* INFO KEMASAN BAWAAN */}
                     <div className="flex justify-between items-start gap-1">
                       <span className="text-[8px] font-bold bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded-sm uppercase tracking-wider font-mono">
                         {item.fertilizer_code}
                       </span>
-                      <span className="text-[9px] text-gray-400 font-semibold font-mono">
-                        {finalWeight} Kg
+                      <span className="text-[9px] text-gray-500 font-bold font-mono bg-gray-100 px-1.5 py-0.5 rounded-md">
+                        Kemasan {finalWeight} Kg
                       </span>
                     </div>
 
-                    <div className="h-28 my-3 flex items-center justify-center p-2">
+                    {/* TAMBAHAN INFO: SAAT DIGANTI JADINYA BERAPA KARUNG + BERAPA KG */}
+                    <div className="mt-2 bg-emerald-50/70 border border-emerald-200/60 p-2 rounded-lg text-emerald-950 flex items-center gap-1.5">
+                      <FaExchangeAlt className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
+                      <div className="text-[9.5px] leading-tight">
+                        <span className="text-emerald-700 block font-semibold text-[8.5px]">
+                          Jika Diganti:
+                        </span>
+                        <span className="font-extrabold text-emerald-900">
+                          {conversionText}
+                        </span>
+                        <span className="text-emerald-700 font-medium block text-[8px] -mt-0.5">
+                          (Total {targetKgToConvert} Kg)
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* GAMBAR PUPUK */}
+                    <div className="h-24 my-2 flex items-center justify-center p-2">
                       <img 
                         src={computedImageUrl} 
                         alt={item.nama} 
@@ -224,7 +254,8 @@ export default function FertilizerSwapModal({
                       />
                     </div>
 
-                    <div className="space-y-1 text-left mb-4">
+                    {/* DESKRIPSI & HARGA */}
+                    <div className="space-y-1 text-left mb-3">
                       <h4 className="font-extrabold text-xs text-gray-800 leading-tight">
                         {item.nama}
                       </h4>
@@ -232,7 +263,6 @@ export default function FertilizerSwapModal({
                         {item.fungsi}
                       </p>
                       
-                      {/* INFORMASI DETAIL HARGA */}
                       <div className="grid grid-cols-2 gap-1 pt-1.5 text-[9px] border-t border-gray-100">
                         <div>
                           <span className="text-gray-400 block font-medium">Harga / Kg</span>
@@ -264,7 +294,7 @@ export default function FertilizerSwapModal({
         </div>
 
         {/* FOOTER */}
-        <div className="px-6 py-4 border-t border-gray-155 flex justify-between items-center bg-white text-[10px] text-gray-400 font-semibold">
+        <div className="px-6 py-4 border-t border-gray-100 flex justify-between items-center bg-white text-[10px] text-gray-400 font-semibold">
           <span>
             {activeTab === "ai" ? "Menampilkan rekomendasi kecerdasan buatan" : "Menampilkan seluruh katalog distributor"}
           </span>

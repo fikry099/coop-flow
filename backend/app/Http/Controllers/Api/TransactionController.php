@@ -79,7 +79,6 @@ class TransactionController extends Controller
      */
     public function store(Request $request)
     {
-        // 1. Validasi Input Data
         $validator = Validator::make($request->all(), [
             'farmer_id' => 'required|exists:users,id',
             'payment_method' => 'required|string',
@@ -109,11 +108,10 @@ class TransactionController extends Controller
             ], 422);
         }
 
-        // 2. Eksekusi Database Transaction
         try {
             $transactionResult = DB::transaction(function () use ($request) {
 
-                // A. Generate Kode Transaksi Unik
+                // A. Generate Kode Transaksi & Invoice Unik
                 $transactionCode = 'GAF-' . date('ymd') . '-' . rand(1000, 9999);
                 $invoiceNumber = 'INV-' . date('ymd') . '-' . rand(1000, 9999);
 

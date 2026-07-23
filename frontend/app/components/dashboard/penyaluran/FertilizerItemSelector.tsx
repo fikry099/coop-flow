@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { CustomFertilizerItem } from "./LandPredictionCard";
 import FertilizerSwapModal from "./FertilizerSwapModal"; 
-import { FaLightbulb, FaBox, FaPlus, FaMinus, FaExchangeAlt, FaCheck, FaShoppingBag } from "react-icons/fa";
+import { FaPlus, FaMinus, FaRightLeft, FaCheck, FaGaugeHigh } from "react-icons/fa6";
 
 export interface SelectedBagItem {
   bagKey: string;
@@ -30,396 +30,506 @@ interface BagState {
   isChecked: boolean;
   selectedType: string; 
   weightKg: number;    
-  fertilizer_id?: number | null; // Amankan ID dari Backend di level state karung
+  fertilizer_id?: number | null;
   customDetails?: CustomFertilizerItem; 
 }
 
 export default function FertilizerItemSelector({ recommendations, onSelectionChange }: FertilizerItemSelectorProps) {
   const [activeItemIndex, setActiveItemIndex] = useState<number>(0);
   const [bags, setBags] = useState<BagState[]>([]);
-  const [targetBagKey, setTargetBagKey] = useState<string | null>(null);
+  const [targetTypeToSwap, setTargetTypeToSwap] = useState<string | null>(null);
   
+  // State untuk kontrol Modal Tambah Pupuk Baru
+  const [isAddingNewType, setIsAddingNewType] = useState<boolean>(false);
+
   const prevRecommendationsRef = useRef<CustomFertilizerItem[]>(recommendations);
-
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-  const currentActiveItem = recommendations[activeItemIndex];
+  
+  // PATOKAN UTAMA AI (STATIS)
+  const originalAiRecommendation = recommendations[0];
 
-  const activeBag = bags.find(b => b.key === targetBagKey);
-  const isModalOpen = targetBagKey !== null;
-  const targetBagIndex = activeBag ? activeBag.index : 1;
+  // Helper formatting URL Gambar
+  const getCleanImageUrl = (rawPath?: string | null) => {
+    if (!rawPath) return "https://placehold.co/100x120/a7f3d0/065f46?text=PUPUK";
+    if (rawPath.startsWith("http://") || rawPath.startsWith("https://")) {
+      return rawPath;
+    }
+    const cleanPath = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
+    return `${baseUrl}${cleanPath}`.replace(/([^:]\/)\/+/g, "$1");
+  };
 
   const getFertilizerDetails = (bag: BagState): CustomFertilizerItem => {
     if (bag.customDetails) return bag.customDetails;
     const match = recommendations.find(item => item.fertilizer_code?.toLowerCase() === bag.selectedType.toLowerCase());
-    return match || currentActiveItem;
+    return match || originalAiRecommendation;
   };
 
-  const getSummary = (currentBags: BagState[]) => {
+const getSummary = (currentBags: BagState[]) => {
     let totalCostChecked = 0;
     let totalBagsChecked = 0;
     let totalKgChecked = 0;
     const selectedItems: SelectedBagItem[] = [];
 
-    currentBags.forEach(bag => {
-      const details = getFertilizerDetails(bag);
-      
-      // Inject kembali fertilizer_id ke dalam details jika hilang di tengah jalan
+    // 1. Grouping dulu bags berdasarkan jenis pupuk
+    const localGroupedMap = currentBags.reduce((acc, bag) => {
+      const type = bag.selectedType;
+      if (!acc[type]) {
+        acc[type] = {
+          bags: [],
+          totalKg: 0,
+          isChecked: bag.isChecked,
+        };
+      }
+      acc[type].bags.push(bag);
+      if (bag.isChecked) {
+        acc[type].totalKg += bag.weightKg;
+      }
+      return acc;
+    }, {} as Record<string, { bags: BagState[]; totalKg: number; isChecked: boolean }>);
+
+    // 2. Buat hanya 1 record per jenis pupuk yang dikirim ke checkout
+    Object.entries(localGroupedMap).forEach(([type, group], groupIndex) => {
+      const firstBag = group.bags[0];
+      const details = getFertilizerDetails(firstBag);
       const resolvedDetails = {
         ...details,
-        fertilizer_id: bag.fertilizer_id || details.fertilizer_id || (details as any).id || null
+        fertilizer_id: firstBag.fertilizer_id || details.fertilizer_id || (details as any).id || null
       };
 
+      const groupTotalKg = Number(group.totalKg.toFixed(2));
+
       selectedItems.push({
-        bagKey: bag.key,
-        index: bag.index,
-        fertilizerCode: bag.selectedType,
-        weightKg: bag.weightKg,
-        isChecked: bag.isChecked,
+        bagKey: `group-${type}-${groupIndex}`,
+        index: groupIndex + 1,
+        fertilizerCode: type,
+        weightKg: groupTotalKg,
+        isChecked: group.isChecked,
         details: resolvedDetails
       });
 
-      if (bag.isChecked) {
-        const actualBagPrice = Math.round(details.price_per_kg * bag.weightKg);
-        totalCostChecked += actualBagPrice;
-        totalBagsChecked += 1;
-        totalKgChecked += bag.weightKg;
+      if (group.isChecked) {
+        const actualGroupPrice = Math.round(details.price_per_kg * groupTotalKg);
+        totalCostChecked += actualGroupPrice;
+        totalBagsChecked += group.bags.length;
+        totalKgChecked += groupTotalKg;
       }
     });
 
     return { 
       totalBags: totalBagsChecked, 
       totalCost: totalCostChecked, 
-      totalKg: totalKgChecked,
-      selectedItems 
+      totalKg: Number(totalKgChecked.toFixed(2)),
+      selectedItems
     };
   };
 
-  // Inisialisasi awal saat rekomendasi baru pertama kali masuk
+  // Helper membuat bag berdasarkan target Kg
+  const createBagsFromTargetKg = (targetItem: CustomFertilizerItem, targetKgValue?: number): BagState[] => {
+    const totalTargetKg = targetKgValue ?? (targetItem.total_recommended_kg || targetItem.original_recommended_kg || 50);
+    const packagingSize = targetItem.packaging_size_kg || 50;
+    const cleanName = targetItem.fertilizer_code || "NPK";
+    const fId = targetItem.fertilizer_id || (targetItem as any).id || null;
+
+    const fullBagsCount = Math.floor(totalTargetKg / packagingSize);
+    const remainderKg = Number((totalTargetKg % packagingSize).toFixed(2));
+
+    const generatedBags: BagState[] = [];
+
+    for (let i = 0; i < fullBagsCount; i++) {
+      generatedBags.push({
+        key: `bag-full-${i + 1}-${Date.now()}`,
+        index: i + 1,
+        isChecked: true,
+        selectedType: cleanName,
+        weightKg: packagingSize,
+        fertilizer_id: fId ? Number(fId) : null,
+        customDetails: targetItem,
+      });
+    }
+
+    if (remainderKg > 0) {
+      generatedBags.push({
+        key: `bag-remainder-${Date.now()}`,
+        index: generatedBags.length + 1,
+        isChecked: true,
+        selectedType: cleanName,
+        weightKg: remainderKg,
+        fertilizer_id: fId ? Number(fId) : null,
+        customDetails: targetItem,
+      });
+    }
+
+    if (generatedBags.length === 0 && totalTargetKg > 0) {
+      generatedBags.push({
+        key: `bag-single-${Date.now()}`,
+        index: 1,
+        isChecked: true,
+        selectedType: cleanName,
+        weightKg: totalTargetKg,
+        fertilizer_id: fId ? Number(fId) : null,
+        customDetails: targetItem,
+      });
+    }
+
+    return generatedBags;
+  };
+
   useEffect(() => {
     const isRecommendationsChanged = JSON.stringify(prevRecommendationsRef.current) !== JSON.stringify(recommendations);
     
     if (recommendations.length > 0 && (bags.length === 0 || isRecommendationsChanged)) {
       prevRecommendationsRef.current = recommendations;
-      
       const defaultItem = recommendations[0];
-      const initialBagsCount = defaultItem.jumlah_karung || 1;
-      const cleanName = defaultItem.fertilizer_code || "NPK"; 
-      const weightPerBag = defaultItem.packaging_size_kg || 50;
-      const fId = defaultItem.fertilizer_id || (defaultItem as any).id || null;
-
-      const initialBags: BagState[] = Array.from({ length: initialBagsCount }).map((_, idx) => ({
-        key: `bag-${idx + 1}`,
-        index: idx + 1,
-        isChecked: true,
-        selectedType: cleanName,
-        weightKg: weightPerBag,
-        fertilizer_id: fId ? Number(fId) : null, // Amankan ID disini
-        customDetails: defaultItem, 
-      }));
+      const initialBags = createBagsFromTargetKg(defaultItem);
 
       setBags(initialBags);
-      setActiveItemIndex(0); // Reset ke tab pertama
+      setActiveItemIndex(0);
       onSelectionChange(getSummary(initialBags));
     }
   }, [recommendations]);
 
-  // Ganti tab kemasan otomatis menghitung ulang jumlah karung sesuai prediksi dosis AI
-  const handleActiveItemChange = (idx: number) => {
-    setActiveItemIndex(idx);
-    const targetRecommendation = recommendations[idx];
-    
-    // Ambil target prediksi dosis AI (contoh: 100 Kg)
-    const targetRecommendedKg = targetRecommendation.original_recommended_kg || 50;
-    
-    // Ambil kapasitas kemasan yang baru dipilih (contoh: 20 Kg atau 50 Kg)
-    const newWeightPerBag = targetRecommendation.packaging_size_kg || 50;
-    
-    // Hitung jumlah karung yang dibutuhkan secara otomatis (pembulatan ke atas)
-    const calculatedBagsCount = Math.ceil(targetRecommendedKg / newWeightPerBag);
-    const fId = targetRecommendation.fertilizer_id || (targetRecommendation as any).id || null;
-
-    // Generate ulang struktur karung yang baru
-    const updatedBags: BagState[] = Array.from({ length: calculatedBagsCount }).map((_, index) => ({
-      key: `bag-${index + 1}-${Date.now()}`, // Gunakan unique key baru agar state visual ter-reset dengan mulus
-      index: index + 1,
-      isChecked: true,
-      selectedType: targetRecommendation.fertilizer_code,
-      weightKg: newWeightPerBag,
-      fertilizer_id: fId ? Number(fId) : null, // Amankan ID di sini
-      customDetails: targetRecommendation
-    }));
-
-    setBags(updatedBags);
-    onSelectionChange(getSummary(updatedBags));
-  };
-
-  const handleToggleBag = (key: string) => {
-    const updated = bags.map(bag => bag.key === key ? { ...bag, isChecked: !bag.isChecked } : bag);
-    setBags(updated);
-    onSelectionChange(getSummary(updated));
-  };
-
-  const handleSwapFertilizerType = (bagKey: string, fertilizerItem: CustomFertilizerItem) => {
-    const fId = fertilizerItem.fertilizer_id || (fertilizerItem as any).id || null;
-    const updated = bags.map(bag => {
-      if (bag.key === bagKey) {
-        return { 
-          ...bag, 
-          selectedType: fertilizerItem.fertilizer_code,
-          weightKg: fertilizerItem.packaging_size_kg || 50,
-          fertilizer_id: fId ? Number(fId) : null, // Amankan ID saat diswap!
-          customDetails: {
-            ...fertilizerItem,
-            packaging_size_kg: fertilizerItem.packaging_size_kg || 50
-          }
-        };
+  // Grouping Data
+  const groupedBagsMap = bags.reduce((acc, bag) => {
+    const type = bag.selectedType;
+    if (!acc[type]) {
+      acc[type] = {
+        type,
+        fullBagsCount: 0,
+        extraKg: 0,
+        totalKg: 0,
+        isChecked: bag.isChecked,
+        fertilizer_id: bag.fertilizer_id,
+        details: getFertilizerDetails(bag),
+        originalBags: []
+      };
+    }
+    acc[type].originalBags.push(bag);
+    if (bag.isChecked) {
+      const standardSize = acc[type].details.packaging_size_kg || 50;
+      if (bag.weightKg === standardSize) {
+        acc[type].fullBagsCount += 1;
+      } else {
+        acc[type].extraKg = Number((acc[type].extraKg + bag.weightKg).toFixed(2));
       }
-      return bag;
-    });
+      acc[type].totalKg = Number((acc[type].totalKg + bag.weightKg).toFixed(2));
+    }
+    return acc;
+  }, {} as Record<string, { type: string; fullBagsCount: number; extraKg: number; totalKg: number; isChecked: boolean; fertilizer_id: any; details: CustomFertilizerItem; originalBags: BagState[] }>);
+
+  const groupedBagsList = Object.values(groupedBagsMap);
+
+  const handleToggleGroup = (type: string) => {
+    const currentStatus = groupedBagsMap[type]?.isChecked;
+    const updated = bags.map(bag => bag.selectedType === type ? { ...bag, isChecked: !currentStatus } : bag);
     setBags(updated);
-    setTargetBagKey(null);
     onSelectionChange(getSummary(updated));
   };
 
-  const handleAddBag = () => {
-    const defaultType = currentActiveItem?.fertilizer_code || "NPK";
-    const defaultWeight = currentActiveItem?.packaging_size_kg || 50;
-    const fId = currentActiveItem?.fertilizer_id || (currentActiveItem as any).id || null;
+  // Ubah Karung Utuh (Atas)
+  const handleModifyFullBagCount = (type: string, delta: number) => {
+    const sampleBag = groupedBagsMap[type]?.originalBags[0];
+    const defaultWeight = sampleBag?.customDetails?.packaging_size_kg || 50;
+
+    if (delta > 0) {
+      const newBag: BagState = {
+        key: `bag-full-${Date.now()}-${bags.length + 1}`,
+        index: bags.length + 1,
+        isChecked: true,
+        selectedType: type,
+        weightKg: defaultWeight,
+        fertilizer_id: sampleBag?.fertilizer_id || null,
+        customDetails: sampleBag?.customDetails || originalAiRecommendation
+      };
+      const updated = [...bags, newBag];
+      setBags(updated);
+      onSelectionChange(getSummary(updated));
+    } else {
+      const fullBags = bags.filter(b => b.selectedType === type && b.weightKg === defaultWeight);
+      if (fullBags.length <= 1) return;
+      const lastFullBagKey = fullBags[fullBags.length - 1].key;
+      const updated = bags.filter(b => b.key !== lastFullBagKey);
+      setBags(updated);
+      onSelectionChange(getSummary(updated));
+    }
+  };
+
+  // Ubah Kg Eceran (Bawah)
+  const handleModifyExtraKg = (type: string, deltaKg: number) => {
+    const group = groupedBagsMap[type];
+    if (!group) return;
+
+    const extraBags = bags.filter(b => b.selectedType === type && b.weightKg !== (group.details.packaging_size_kg || 50));
+
+    if (extraBags.length > 0) {
+      const updated = bags.map(b => {
+        if (b.key === extraBags[0].key) {
+          const newWeight = Math.max(0, Number((b.weightKg + deltaKg).toFixed(2)));
+          return { ...b, weightKg: newWeight };
+        }
+        return b;
+      }).filter(b => b.weightKg > 0);
+
+      setBags(updated);
+      onSelectionChange(getSummary(updated));
+    } else if (deltaKg > 0) {
+      const customBag: BagState = {
+        key: `bag-custom-${Date.now()}`,
+        index: bags.length + 1,
+        isChecked: true,
+        selectedType: type,
+        weightKg: deltaKg,
+        fertilizer_id: group.fertilizer_id,
+        customDetails: group.details
+      };
+      const updated = [...bags, customBag];
+      setBags(updated);
+      onSelectionChange(getSummary(updated));
+    }
+  };
+
+  // Ganti Jenis Pupuk yang Ada (Swap)
+  const handleSwapGroupType = (oldType: string, newFertilizerItem: CustomFertilizerItem) => {
+    const oldGroup = groupedBagsMap[oldType];
+    const currentTotalKg = oldGroup ? oldGroup.totalKg : (originalAiRecommendation?.total_recommended_kg || 50);
+
+    const newBags = createBagsFromTargetKg(newFertilizerItem, currentTotalKg);
     
-    const newBag: BagState = {
-      key: `bag-${Date.now()}-${bags.length + 1}`,
-      index: bags.length + 1,
-      isChecked: true,
-      selectedType: defaultType,
-      weightKg: defaultWeight,
-      fertilizer_id: fId ? Number(fId) : null, // Amankan ID saat karung baru ditambahkan!
-      customDetails: currentActiveItem,
-    };
-    
-    const updated = [...bags, newBag];
+    const remainingBags = bags.filter(b => b.selectedType !== oldType);
+    const updated = [...remainingBags, ...newBags];
+
     setBags(updated);
+    setTargetTypeToSwap(null);
     onSelectionChange(getSummary(updated));
   };
 
-  const handleRemoveBag = () => {
-    if (bags.length <= 1) return;
-    const updated = bags.slice(0, -1);
+  // Tambah Jenis Pupuk Baru (Add New)
+  const handleAddNewFertilizerType = (newFertilizerItem: CustomFertilizerItem) => {
+    // Default awal ketika menambah pupuk baru: 1 Karung utuh
+    const defaultKg = newFertilizerItem.packaging_size_kg || 50;
+    const newBags = createBagsFromTargetKg(newFertilizerItem, defaultKg);
+
+    const updated = [...bags, ...newBags];
     setBags(updated);
+    setIsAddingNewType(false);
     onSelectionChange(getSummary(updated));
   };
 
-  const handleModifyBagWeight = (key: string, increment: number) => {
-    const updated = bags.map(bag => {
-      if (bag.key === key) {
-        const newWeight = Math.max(5, bag.weightKg + increment);
-        return { ...bag, weightKg: newWeight };
-      }
-      return bag;
-    });
-    setBags(updated);
-    onSelectionChange(getSummary(updated));
-  };
-
-  const { totalBags: totalBagsChecked, totalCost: totalCostChecked, totalKg: totalKgChecked } = getSummary(bags);
+  const { totalCost: totalCostChecked, totalKg: totalKgChecked, totalBags: totalBagsChecked } = getSummary(bags);
+  
+  // TEKS REKOMENDASI PATOKAN ASLI DARI AI
+  const aiRecommendedKg = originalAiRecommendation?.total_recommended_kg || originalAiRecommendation?.original_recommended_kg || 50;
+  const aiPackagingSize = originalAiRecommendation?.packaging_size_kg || 50;
+  const aiFullBags = Math.floor(aiRecommendedKg / aiPackagingSize);
+  const aiExtraKg = Number((aiRecommendedKg % aiPackagingSize).toFixed(2));
+  const aiFormattedDoseText = aiExtraKg > 0 
+    ? `${aiFullBags} Karung + ${aiExtraKg} Kg` 
+    : `${aiFullBags} Karung`;
 
   return (
-    <div className="space-y-4">
-      {/* 1. HIGHLIGHT DOSIS REKOMENDASI UTAMA */}
-      <div className="w-full bg-emerald-50/60 border border-emerald-100 p-4 rounded-xl flex items-start gap-3 text-xs shadow-xs">
-        <div className="text-emerald-700 mt-0.5">
-          <FaLightbulb className="w-4 h-4" />
-        </div>
-        <div>
-          <span className="text-[11px] font-bold text-emerald-800 block mb-0.5">Rekomendasi Dosis Optimal AI:</span>
-          <p className="text-zinc-600 font-medium">
-            Kebutuhan Lahan: <span className="text-emerald-700 font-black">{currentActiveItem?.original_recommended_kg} Kg</span> ({currentActiveItem?.nama})
-          </p>
+    <div className="space-y-4 font-sans text-gray-800">
+      
+      {/* 1. HIGHLIGHT BANNER REKOMENDASI DOSIS AI */}
+      <div className="w-full bg-emerald-100/70 border border-emerald-300 p-3.5 rounded-2xl flex items-center justify-between text-xs shadow-3xs">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0">
+            <FaGaugeHigh className="w-3.5 h-3.5" />
+          </div>
+          <div>
+            <span className="text-[11px] font-bold text-emerald-800 block">Rekomendasi Dosis Optimal Sistem:</span>
+            <p className="text-emerald-950 font-bold text-sm">
+              Kebutuhan Pupuk Di Lahan Ini: <span className="text-emerald-700 font-extrabold">{aiFormattedDoseText} ({aiRecommendedKg} Kg)</span> Dengan Jenis {originalAiRecommendation?.fertilizer_code || "NPK"}
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* 2. CONTROLLER */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50/50 p-4 rounded-xl border border-gray-150">
-        <div className="space-y-1.5">
-          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
-            <FaBox className="text-[9px]" /> Pilih Kapasitas Ukuran Kemasan Karung:
-          </span>
-          <div className="flex flex-wrap gap-2">
-            {recommendations.map((item, idx) => (
-              <button
-                key={item.id || idx}
-                onClick={() => handleActiveItemChange(idx)}
-                className={`px-3.5 py-1.5 rounded-full font-bold text-[11px] border transition-all ${
-                  activeItemIndex === idx
-                    ? "bg-emerald-600 border-emerald-600 text-white shadow-xs"
-                    : "bg-white border-gray-200 text-gray-600 hover:border-emerald-300"
-                }`}
-              >
-                📦 Kemasan {item.packaging_size_kg} Kg
-              </button>
-            ))}
-          </div>
-        </div>
+      {/* 2. KOTAK KONTROL & DETAIL PUPUK DIPILIH */}
+      {groupedBagsList.map((group) => {
+        const currentDoseText = group.extraKg > 0 
+          ? `${group.fullBagsCount} Karung + ${group.extraKg} Kg` 
+          : `${group.fullBagsCount} Karung`;
 
-        <div className="space-y-1.5">
-          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
-            <FaShoppingBag className="text-[9px]" /> Atur Jumlah Karung Lahan Ini:
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleRemoveBag}
-              disabled={bags.length <= 1}
-              className="w-8 h-8 rounded-lg bg-white border border-gray-200 text-gray-600 hover:text-red-600 hover:border-red-200 disabled:opacity-50 flex items-center justify-center transition-all shadow-xs"
-            >
-              <FaMinus className="w-2.5 h-2.5" />
-            </button>
-            <div className="px-4 py-1 bg-white border border-gray-200 rounded-lg text-xs font-black text-gray-800 min-w-[50px] text-center shadow-xs">
-              {bags.length} Karung
+        return (
+          <div key={group.type} className="space-y-3">
+            <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-3xs flex flex-wrap items-center justify-between gap-3">
+              
+              {/* UKURAN KEMASAN + HASIL KONVERSI PUPUK DIPILIH */}
+              <div className="space-y-1">
+                <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider block">
+                  PILIH KAPASITAS UKURAN KEMASAN KARUNG :
+                </span>
+                <button className="px-4 py-2 bg-emerald-500 text-white rounded-xl font-bold text-xs shadow-2xs flex items-center gap-1.5">
+                  Kemasan {group.details.packaging_size_kg || 50} Kg
+                </button>
+
+                {/* HASIL KONVERSI DINAMIS SETELAH DI-SWAP */}
+                <div className="pt-1">
+                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200 inline-block">
+                    Kebutuhan Jenis Ini: <span className="font-extrabold text-emerald-700">{currentDoseText} ({group.totalKg} Kg)</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider block text-center">
+                  ATUR JUMLAH KARUNG PUPUK LAHAN INI:
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={group.fullBagsCount <= 1}
+                    onClick={() => handleModifyFullBagCount(group.type, -1)}
+                    className="w-8 h-8 rounded-lg border border-gray-300 bg-gray-50 flex items-center justify-center font-bold text-gray-700 hover:bg-gray-100 disabled:opacity-30"
+                  >
+                    <FaMinus className="w-2.5 h-2.5" />
+                  </button>
+                  <div className="px-3 py-1 bg-white border border-gray-200 rounded-xl text-center min-w-[70px]">
+                    <span className="block font-black text-sm text-gray-800">{group.fullBagsCount}</span>
+                    <span className="block text-[9px] font-bold text-gray-400 -mt-1">Karung</span>
+                  </div>
+                  <button
+                    onClick={() => handleModifyFullBagCount(group.type, 1)}
+                    className="w-8 h-8 rounded-lg border border-gray-300 bg-gray-50 flex items-center justify-center font-bold text-gray-700 hover:bg-gray-100"
+                  >
+                    <FaPlus className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              </div>
             </div>
-            <button
-              onClick={handleAddBag}
-              className="w-8 h-8 rounded-lg bg-white border border-gray-200 text-gray-600 hover:text-emerald-600 hover:border-emerald-200 flex items-center justify-center transition-all shadow-xs"
-            >
-              <FaPlus className="w-2.5 h-2.5" />
-            </button>
-          </div>
-        </div>
-      </div>
 
-      {/* 3. DAFTAR UNIT KARUNG */}
-      <div className="space-y-3 pt-1">
-        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-          🛍️ Checklist & Kustomisasi Satuan Karung:
-        </p>
-
-        {bags.map((bag) => {
-          const matchedDetails = getFertilizerDetails(bag);
-          const rawPath = matchedDetails.image_url || (matchedDetails as any).image;
-          
-          let computedImageUrl = "https://placehold.co/100x120/a7f3d0/065f46?text=PUPUK";
-          if (rawPath) {
-            if (rawPath.startsWith("http://") || rawPath.startsWith("https://")) {
-              computedImageUrl = rawPath;
-            } else {
-              const cleanPath = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
-              computedImageUrl = `${baseUrl}${cleanPath}`.replace(/([^:]\/)\/+/g, "$1");
-            }
-          }
-
-          const actualPrice = Math.round(matchedDetails.price_per_kg * bag.weightKg);
-
-          const isUserModified = 
-            !bag.isChecked || 
-            bag.weightKg !== matchedDetails.original_recommended_kg / matchedDetails.original_recommended_bags ||
-            bag.selectedType !== recommendations[activeItemIndex]?.fertilizer_code;
-
-          return (
-            <div key={bag.key} className={`w-full flex flex-col gap-3 p-3 rounded-xl border transition-all text-xs bg-white shadow-2xs ${isUserModified && bag.isChecked ? "border-amber-300 bg-amber-50" : "border-gray-250"}`}>
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2.5 min-w-0">
+            {/* KARTU DETAIL PUPUK + KONTROL KG ECERAN */}
+            <div className={`p-4 bg-white rounded-2xl border border-gray-200 shadow-3xs transition-all space-y-3 ${
+              !group.isChecked ? "opacity-50 bg-gray-50" : ""
+            }`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-3">
                   <div 
-                    onClick={() => handleToggleBag(bag.key)}
-                    className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all cursor-pointer ${
-                      bag.isChecked ? "border-emerald-600 bg-emerald-600 text-white" : "border-gray-300 bg-white"
+                    onClick={() => handleToggleGroup(group.type)}
+                    className={`w-6 h-6 rounded-full flex items-center justify-center cursor-pointer transition-all ${
+                      group.isChecked ? "bg-emerald-500 text-white" : "border-2 border-gray-300 bg-white"
                     }`}
                   >
-                    {bag.isChecked && <FaCheck className="w-2.5 h-2.5" />}
+                    {group.isChecked && <FaCheck className="w-3 h-3" />}
                   </div>
 
-                  <div className="w-8 h-8 bg-white border border-gray-100 rounded-lg flex items-center justify-center p-0.5 shrink-0 shadow-2xs">
+                  <div className="w-16 h-16 bg-emerald-50 rounded-xl flex items-center justify-center overflow-hidden">
                     <img 
-                      src={computedImageUrl} 
-                      alt={matchedDetails.nama} 
-                      className="h-full object-contain"
+                      src={getCleanImageUrl(group.details.image_url)} 
+                      alt={group.details.nama} 
+                      className="h-full w-full object-contain"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = "https://placehold.co/100x120/a7f3d0/065f46?text=PUPUK";
                       }}
                     />
                   </div>
 
-                  <div className="min-w-0 flex flex-col">
-                    <span className="font-extrabold text-gray-800 text-[11px] truncate leading-tight flex items-center gap-1.5">
-                      {matchedDetails.nama}
-                      {isUserModified && bag.isChecked && (
-                        <span className="text-[8px] px-1 py-0.2 bg-amber-100 text-amber-800 rounded font-bold">Pilihan Anda</span>
-                      )}
-                    </span>
-                    <span className="text-[9px] text-gray-400 font-semibold mt-0.5">
-                      Karung Ke-{bag.index}
-                    </span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-extrabold text-gray-900 text-sm">{group.details.nama}</span>
+                      <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded-md text-[9px] font-extrabold">
+                        Pilihan Anda
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-gray-400 font-medium">Karung</span>
                   </div>
                 </div>
 
-                <div className="text-right shrink-0">
-                  <p className="font-extrabold text-gray-900 text-[11px] leading-tight">
-                    Rp {actualPrice.toLocaleString("id-ID")}
+                <div className="text-right">
+                  <p className="font-black text-gray-900 text-sm">
+                    Rp {Math.round(group.details.price_per_kg * group.totalKg).toLocaleString("id-ID")}
                   </p>
-                  <p className="text-[9px] text-gray-400 font-mono uppercase tracking-tighter">
-                    {matchedDetails.fertilizer_code}
+                  <p className="text-[10px] text-gray-400 font-bold uppercase">
+                    {group.details.fertilizer_code} - FPK
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-2 border-t border-gray-100/70 pt-2">
+              {/* BARIS BAWAH: SWAP & KONTROL KG ECERAN */}
+              <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                 <button
-                  onClick={() => setTargetBagKey(bag.key)}
-                  className="text-[10px] font-extrabold text-emerald-700 hover:text-emerald-950 underline flex items-center gap-1 shrink-0 py-1"
+                  onClick={() => setTargetTypeToSwap(group.type)}
+                  className="text-emerald-600 hover:text-emerald-800 font-bold text-xs flex items-center gap-1.5"
                 >
-                  <FaExchangeAlt className="text-[8px]" /> Ganti Jenis
+                  <FaRightLeft className="w-3 h-3" /> Ganti Jenis
                 </button>
 
-                <div className="flex items-center gap-1 bg-gray-50 px-1.5 py-0.5 rounded-lg border border-gray-150 shrink-0">
+                {/* KONTROL KG ECERAN */}
+                <div className="flex items-center gap-1.5 bg-gray-50 p-1 rounded-xl border border-gray-200">
                   <button
-                    disabled={!bag.isChecked}
-                    onClick={() => handleModifyBagWeight(bag.key, -5)}
-                    className="w-5 h-5 rounded bg-white border border-gray-200 hover:bg-gray-100 disabled:opacity-40 flex items-center justify-center text-gray-600 transition-colors shrink-0 shadow-3xs"
+                    disabled={group.extraKg <= 0}
+                    onClick={() => handleModifyExtraKg(group.type, -1)}
+                    className="w-6 h-6 rounded-md bg-white border border-gray-200 flex items-center justify-center font-bold text-gray-600 hover:bg-gray-100 disabled:opacity-30"
                   >
-                    <FaMinus className="w-1.5 h-1.5" />
+                    <FaMinus className="w-2 h-2" />
                   </button>
-                  <span className="font-bold text-gray-700 text-[10px] w-8 text-center font-mono">
-                    {bag.weightKg} Kg
+                  <span className="font-extrabold text-xs text-gray-800 px-2">
+                    {group.extraKg} Kg
                   </span>
                   <button
-                    disabled={!bag.isChecked}
-                    onClick={() => handleModifyBagWeight(bag.key, 5)}
-                    className="w-5 h-5 rounded bg-white border border-gray-200 hover:bg-gray-100 disabled:opacity-40 flex items-center justify-center text-gray-600 transition-colors shrink-0 shadow-3xs"
+                    onClick={() => handleModifyExtraKg(group.type, 1)}
+                    className="w-6 h-6 rounded-md bg-white border border-gray-200 flex items-center justify-center font-bold text-gray-600 hover:bg-gray-100"
                   >
-                    <FaPlus className="w-1.5 h-1.5" />
+                    <FaPlus className="w-2 h-2" />
                   </button>
                 </div>
               </div>
             </div>
-          );
-        })}
-      </div>
+          </div>
+        );
+      })}
 
-      {/* 4. SUMMARY */}
-      <div className="border-t border-dashed border-gray-200 pt-4 mt-3 flex justify-between items-center text-xs">
+      {/* --- TOMBOL TAMBAH PUPUK BARU --- */}
+      <button
+        type="button"
+        onClick={() => setIsAddingNewType(true)}
+        className="w-full py-3 px-4 border-2 border-dashed border-emerald-400 hover:border-emerald-500 bg-emerald-50/50 hover:bg-emerald-50 text-emerald-700 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-2xs active:scale-[0.99]"
+      >
+        <FaPlus className="w-3.5 h-3.5" />
+        <span>Tambah Jenis Pupuk Lain</span>
+      </button>
+
+      {/* 3. TOTAL RINGKASAN BAWAH */}
+      <div className="pt-2 border-t border-gray-200 flex justify-between items-end text-xs">
         <div>
-          <span className="text-[10px] text-gray-400 block font-semibold uppercase tracking-wider">Total Berat Dipilih:</span>
-          <span className="font-black text-gray-800 text-sm">
-            {totalKgChecked} Kg <span className="text-[10px] font-medium text-gray-400">({totalBagsChecked} Karung)</span>
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">TOTAL BERAT DIPILIH:</span>
+          <span className="font-black text-gray-900 text-base">
+            {totalBagsChecked} Karung{" "}
+            <span className="text-gray-500 font-extrabold text-sm">({totalKgChecked} kg)</span>
           </span>
         </div>
         <div className="text-right">
-          <span className="text-[10px] text-gray-400 block font-semibold uppercase tracking-wider">Subtotal Biaya Lahan:</span>
-          <span className="font-black text-emerald-700 text-base">
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">SUBTOTAL BIAYA LAHAN:</span>
+          <span className="font-black text-emerald-600 text-lg">
             Rp {totalCostChecked.toLocaleString("id-ID")}
           </span>
         </div>
       </div>
 
-      {/* 5. MODAL SWAP */}
+      {/* MODAL SWAP / GANTI JENIS PUPUK */}
       <FertilizerSwapModal
-        isOpen={isModalOpen}
-        onClose={() => setTargetBagKey(null)} 
-        bagIndex={targetBagIndex}
-        selectedType={activeBag?.selectedType || ""} 
+        isOpen={targetTypeToSwap !== null}
+        onClose={() => setTargetTypeToSwap(null)} 
+        bagIndex={1}
+        selectedType={targetTypeToSwap || ""} 
+        recommendations={recommendations}
+        baseUrl={baseUrl}
+        currentTotalKg={targetTypeToSwap ? groupedBagsMap[targetTypeToSwap]?.totalKg : undefined}
+        onSelectType={(fertilizerItem) => {
+          if (targetTypeToSwap) {
+            handleSwapGroupType(targetTypeToSwap, fertilizerItem);
+          }
+        }}
+      />
+
+      {/* MODAL TAMBAH PUPUK BARU */}
+      <FertilizerSwapModal
+        isOpen={isAddingNewType}
+        onClose={() => setIsAddingNewType(false)} 
+        bagIndex={1}
+        selectedType="" 
         recommendations={recommendations}
         baseUrl={baseUrl}
         onSelectType={(fertilizerItem) => {
-          if (targetBagKey) {
-            handleSwapFertilizerType(targetBagKey, fertilizerItem);
-          }
+          handleAddNewFertilizerType(fertilizerItem);
         }}
       />
     </div>

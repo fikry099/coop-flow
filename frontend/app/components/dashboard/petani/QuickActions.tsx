@@ -1,81 +1,106 @@
 'use client';
 
 import React from 'react';
-import { useRouter } from 'next/navigation'; // 👈 Import router Next.js
+import { useRouter } from 'next/navigation';
 import { FaMapMarkerAlt, FaSeedling, FaWallet, FaHistory } from 'react-icons/fa';
 
 export default function QuickMenu() {
   const router = useRouter();
 
-  return (
-    <div className="space-y-3">
-      <h2 className="text-sm font-extrabold text-slate-900">Menu</h2>
+  const handleNavigate = (view: string) => {
+    router.push(`?view=${view}`);
+  };
 
-      <div className="grid grid-cols-2 gap-3">
-        {/* Menu 1: Lahan (Mengubah URL parameter tanpa reload) */}
-        <div className="bg-emerald-200/60 p-3.5 rounded-2xl flex flex-col justify-between space-y-3">
-          <div className="flex items-start space-x-2">
-            <div className="p-2 bg-white rounded-xl text-emerald-700 shadow-xs">
-              <FaMapMarkerAlt className="text-base" />
+  return (
+    <div className="space-y-3 font-sans">
+      <h2 className="text-base font-black text-slate-900">Menu Utama</h2>
+
+      <div className="grid grid-cols-2 gap-3.5">
+        {/* Menu 1: Lahan Saya */}
+        <div 
+          onClick={() => handleNavigate('lands')}
+          className="bg-emerald-100/80 hover:bg-emerald-200/90 border border-emerald-300/70 p-4 rounded-2xl flex flex-col justify-between space-y-3 cursor-pointer active:scale-95 transition shadow-2xs group"
+        >
+          <div className="flex items-start space-x-2.5">
+            <div className="p-2.5 bg-white rounded-xl text-emerald-800 shadow-xs flex-shrink-0 group-hover:scale-110 transition">
+              <FaMapMarkerAlt className="text-lg" />
             </div>
-            <div>
-              <p className="font-extrabold text-xs text-slate-900">Lahan</p>
-              <p className="text-[9px] text-slate-600">Lihat lahan milik saya</p>
+            <div className="min-w-0">
+              <p className="font-black text-xs text-slate-900 leading-snug">Lahan Saya</p>
+              <p className="text-[10px] font-semibold text-slate-600 mt-0.5">Daftar lahan milik saya</p>
             </div>
           </div>
           <button 
-            onClick={() => router.push('?view=lands')} // 👈 URL berubah jadi ?view=lands
-            className="w-full bg-white text-emerald-800 text-[10px] font-extrabold py-1.5 rounded-xl shadow-2xs hover:bg-emerald-50 transition cursor-pointer"
+            tabIndex={-1}
+            className="w-full bg-white text-emerald-900 text-xs font-black py-2 rounded-xl shadow-2xs border border-emerald-200 pointer-events-none"
           >
-            Lihat Lahan Saya
+            Lihat Lahan
           </button>
         </div>
 
-        {/* Menu 2: Pemupukan */}
-        <div className="bg-amber-200/60 p-3.5 rounded-2xl flex flex-col justify-between space-y-3">
-          <div className="flex items-start space-x-2">
-            <div className="p-2 bg-white rounded-xl text-amber-700 shadow-xs">
-              <FaSeedling className="text-base" />
+        {/* Menu 2: Pupuk di KDKMP */}
+        <div 
+          onClick={() => handleNavigate('fertilizers')}
+          className="bg-amber-100/80 hover:bg-amber-200/90 border border-amber-300/70 p-4 rounded-2xl flex flex-col justify-between space-y-3 cursor-pointer active:scale-95 transition shadow-2xs group"
+        >
+          <div className="flex items-start space-x-2.5">
+            <div className="p-2.5 bg-white rounded-xl text-amber-800 shadow-xs flex-shrink-0 group-hover:scale-110 transition">
+              <FaSeedling className="text-lg" />
             </div>
-            <div>
-              <p className="font-extrabold text-xs text-slate-900">Pemupukan</p>
-              <p className="text-[9px] text-slate-600">Lihat pemupukan saya</p>
+            <div className="min-w-0">
+              <p className="font-black text-xs text-slate-900 leading-snug">Pupuk KDKMP</p>
+              <p className="text-[10px] font-semibold text-slate-600 mt-0.5">Cek stok pupuk koperasi</p>
             </div>
           </div>
-          <button className="w-full bg-white text-amber-800 text-[10px] font-extrabold py-1.5 rounded-xl shadow-2xs hover:bg-emerald-50 transition cursor-pointer">
-            Lihat Pemupukan
+          <button 
+            tabIndex={-1}
+            className="w-full bg-white text-amber-900 text-xs font-black py-2 rounded-xl shadow-2xs border border-amber-200 pointer-events-none"
+          >
+            Lihat Stok Pupuk
           </button>
         </div>
 
-        {/* Menu 3: Riwayat Transaksi */}
-        <div className="bg-fuchsia-200/60 p-3.5 rounded-2xl flex flex-col justify-between space-y-3">
-          <div className="flex items-start space-x-2">
-            <div className="p-2 bg-white rounded-xl text-fuchsia-700 shadow-xs">
-              <FaWallet className="text-base" />
+        {/* Menu 3: Nota & Transaksi (AKTIF) */}
+        <div 
+          onClick={() => handleNavigate('transactions')}
+          className="bg-fuchsia-100/80 hover:bg-fuchsia-200/90 border border-fuchsia-300/70 p-4 rounded-2xl flex flex-col justify-between space-y-3 cursor-pointer active:scale-95 transition shadow-2xs group"
+        >
+          <div className="flex items-start space-x-2.5">
+            <div className="p-2.5 bg-white rounded-xl text-fuchsia-800 shadow-xs flex-shrink-0 group-hover:scale-110 transition">
+              <FaWallet className="text-lg" />
             </div>
-            <div>
-              <p className="font-extrabold text-xs text-slate-900">Riwayat Transaksi</p>
-              <p className="text-[9px] text-slate-600">Lihat riwayat transaksi saya</p>
+            <div className="min-w-0">
+              <p className="font-black text-xs text-slate-900 leading-snug">Nota & Transaksi</p>
+              <p className="text-[10px] font-semibold text-slate-600 mt-0.5">Riwayat pembelian pupuk</p>
             </div>
           </div>
-          <button className="w-full bg-white text-fuchsia-800 text-[10px] font-extrabold py-1.5 rounded-xl shadow-2xs hover:bg-emerald-50 transition cursor-pointer">
+          <button 
+            tabIndex={-1}
+            className="w-full bg-white text-fuchsia-900 text-xs font-black py-2 rounded-xl shadow-2xs border border-fuchsia-200 pointer-events-none"
+          >
             Lihat Riwayat
           </button>
         </div>
 
-        {/* Menu 4: Riwayat Pemupukan */}
-        <div className="bg-sky-200/60 p-3.5 rounded-2xl flex flex-col justify-between space-y-3">
-          <div className="flex items-start space-x-2">
-            <div className="p-2 bg-white rounded-xl text-sky-700 shadow-xs">
-              <FaHistory className="text-base" />
+        {/* Menu 4: Jadwal Pemupukan */}
+        <div 
+          onClick={() => handleNavigate('fertilizer-history')}
+          className="bg-sky-100/80 hover:bg-sky-200/90 border border-sky-300/70 p-4 rounded-2xl flex flex-col justify-between space-y-3 cursor-pointer active:scale-95 transition shadow-2xs group"
+        >
+          <div className="flex items-start space-x-2.5">
+            <div className="p-2.5 bg-white rounded-xl text-sky-800 shadow-xs flex-shrink-0 group-hover:scale-110 transition">
+              <FaHistory className="text-lg" />
             </div>
-            <div>
-              <p className="font-extrabold text-xs text-slate-900">Riwayat Pemupukan</p>
-              <p className="text-[9px] text-slate-600">Lihat riwayat pemupukan saya</p>
+            <div className="min-w-0">
+              <p className="font-black text-xs text-slate-900 leading-snug">Jadwal Pemupukan</p>
+              <p className="text-[10px] font-semibold text-slate-600 mt-0.5">Catatan pupuk di sawah</p>
             </div>
           </div>
-          <button className="w-full bg-white text-sky-800 text-[10px] font-extrabold py-1.5 rounded-xl shadow-2xs hover:bg-emerald-50 transition cursor-pointer">
-            Lihat Riwayat
+          <button 
+            tabIndex={-1}
+            className="w-full bg-white text-sky-900 text-xs font-black py-2 rounded-xl shadow-2xs border border-sky-200 pointer-events-none"
+          >
+            Lihat Catatan
           </button>
         </div>
       </div>

@@ -70,7 +70,35 @@ export default function TransactionPanel({
     return `${BACKEND_BASE_URL}${cleanPath}`.replace(/([^:]\/)\/+/g, "$1");
   };
 
+  // Filter item yang dicentang oleh pengguna
   const activeBags = items.filter((item) => item.isChecked);
+
+  // MENGHITUNG TOTAL KG AKUMULASI
+  const totalKgCount = Number(
+    activeBags.reduce((acc, item) => acc + item.weightKg, 0).toFixed(2)
+  );
+
+  // MENGHITUNG DUA RINCIAN KARUNG & ECERAN SECARA DINAMIS
+  const bagBreakdown = activeBags.map((item) => {
+    const packagingSize = item.packaging_size_kg || 50; // Default ke 50 Kg jika tidak diset
+    const fullBags = Math.floor(item.weightKg / packagingSize);
+    const remainderKg = Number((item.weightKg % packagingSize).toFixed(2));
+
+    return {
+      name: item.nama,
+      fullBags,
+      remainderKg,
+      packagingSize,
+    };
+  });
+
+  // Total Karung Utuh Gabungan
+  const totalFullBagsCount = bagBreakdown.reduce((acc, b) => acc + b.fullBags, 0);
+
+  // Total Sisa Kg Eceran (Jika Ada Pecahan/Sisa Pembelian)
+  const totalRemainderKg = Number(
+    bagBreakdown.reduce((acc, b) => acc + b.remainderKg, 0).toFixed(2)
+  );
 
   // DETEKSI DINI: Memeriksa apakah ada ID pupuk yang tidak valid (0, NaN, atau undefined)
   const hasInvalidFertilizer = activeBags.some((bag) => {
@@ -165,7 +193,7 @@ export default function TransactionPanel({
 
     const optimizedItems = Object.values(groupedItemsMap);
 
-    // BLOKIR SEBELUM KELUAR REQUEST KE API JIKA DATA TIDAK VALID
+    // BLOKIR SEBELUM REQUEST JIKA DATA TIDAK VALID
     if (dataCacatTerdeteksi) {
       console.error(
         "⛔ Transaksi diblokir di frontend karena ada ID pupuk cacat (0/null).",
@@ -189,7 +217,6 @@ export default function TransactionPanel({
       items: optimizedItems,
     };
 
-    // 🔍 LOG 2: Cek Payload Sebelum Dikirim ke Backend
     console.log("=== [2] PAYLOAD FINAL YANG DIKIRIM KE BACKEND ===");
     console.log(JSON.stringify(payload, null, 2));
 
@@ -277,16 +304,12 @@ export default function TransactionPanel({
         });
       }
     } catch (error: any) {
-      // 🔍 LOG 4: Catch Error & Detail Validasi Server
       console.error("=== [4] ERROR SAAT REQUEST KE BACKEND ===", error);
 
       let serverMessage = "Terjadi kesalahan saat memproses pembayaran.";
       let detailValidationErrors = "";
 
       if (error.response) {
-        console.error("Status Error Server:", error.response.status);
-        console.error("Data Error Server:", error.response.data);
-
         if (error.response.status === 422 && error.response.data.errors) {
           // Error validasi Laravel (field kosong / format salah, dsb)
           const errorsObj = error.response.data.errors;
@@ -382,20 +405,26 @@ export default function TransactionPanel({
         getImageUrl={getImageUrl}
       />
 
-      {/* Rincian Total */}
+      {/* Rincian Total Disesuaikan Secara Dinamis */}
       <div className="bg-gray-50/80 border border-gray-100 rounded-xl p-4 space-y-2 text-xs text-gray-600">
         <div className="flex justify-between">
-          <span>Total Fisik Wadah</span>
+          <span>Jumlah Jenis Pupuk</span>
           <span className="font-bold text-gray-800">
-            {activeBags.length} Karung
+            {new Set(activeBags.map((b) => b.fertilizer_code)).size} Jenis
           </span>
         </div>
-        <div className="flex justify-between">
-          <span>Total Akumulasi Jenis</span>
-          <span className="font-bold text-gray-800">
-            {new Set(activeBags.map((b) => b.fertilizer_code)).size} Jenis Pupuk
+
+        <div className="flex justify-between items-center">
+          <span>Total Akumulasi</span>
+          <span className="font-bold text-gray-800 text-right">
+            {totalKgCount} Kg{" "}
+            <span className="text-emerald-700 font-bold ml-1">
+              ({totalFullBagsCount} Karung Utuh
+              {totalRemainderKg > 0 ? ` + ${totalRemainderKg} Kg eceran` : ""})
+            </span>
           </span>
         </div>
+
         <div className="flex justify-between pt-2 border-t border-gray-200 text-sm">
           <span className="font-semibold text-gray-800">Total Harga</span>
           <span className="font-black text-zinc-900 text-base">

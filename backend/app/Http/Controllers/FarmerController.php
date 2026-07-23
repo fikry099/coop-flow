@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Farmer;
 use App\Models\User;
 use App\Models\Land;
+use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -446,7 +447,6 @@ class FarmerController extends Controller
         }
     }
 
-
     /**
  * Mengambil daftar lahan milik petani yang sedang login (untuk tampilan mobile/dashboard).
  */
@@ -480,7 +480,6 @@ class FarmerController extends Controller
             ], 500);
         }
     }
-
 
     public function getDashboardSummary(Request $request)
     {
@@ -622,6 +621,319 @@ class FarmerController extends Controller
         }
     }
 
+
+    /**
+     * Mengambil daftar pupuk yang tersedia di koperasi tempat petani terdaftar.
+     */
+    public function getCooperativeFertilizers(Request $request)
+    {
+        try {
+            $user = $request->user();
+
+            // 1. Dapatkan cooperative_id dari user petani yang sedang login
+            $cooperativeId = $user->cooperative_id;
+
+            if (!$cooperativeId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Petani tidak terhubung dengan koperasi manapun.',
+                    'data' => []
+                ], 404);
+            }
+
+            // 2. Query pupuk berdasarkan cooperative_id milik petani
+            $fertilizers = \App\Models\Fertilizer::where('cooperative_id', $cooperativeId)
+                ->where('status', 'tersedia') // Menampilkan yang statusnya tersedia
+                ->get()
+                ->map(function ($fertilizer) {
+                    return [
+                        'id' => $fertilizer->id,
+                        'fertilizer_code' => $fertilizer->fertilizer_code,
+                        'name' => $fertilizer->name,
+                        'image' => $fertilizer->image ? Storage::url($fertilizer->image) : null,
+                        'packaging_size_kg' => (float) $fertilizer->packaging_size_kg,
+                        'current_stock_kg' => (float) $fertilizer->current_stock_kg,
+                        'price_per_kg' => (float) $fertilizer->price_per_kg,
+                        'status' => $fertilizer->status,
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Berhasil mengambil daftar pupuk di koperasi.',
+                'data' => $fertilizers
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil data pupuk koperasi.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+
+
+/**
+     * Mengambil riwayat transaksi pembelian pupuk milik petani yang sedang login.
+     */
+    public function getMyTransactions(Request $request)
+    {
+        try {
+            $user = $request->user();
+
+            // 1. Filter opsional berdasarkan status (jika ada kolom status)
+            $status = $request->query('status');
+
+            // 2. Query transaksi langsung berdasarkan ID user yang login
+            //    Menggunakan relasi 'items.fertilizer' sesuai yang ada pada method store()
+            $query = Transaction::with(['items.fertilizer'])
+                ->where('farmer_id', $user->id)
+                ->orderBy('created_at', 'desc');
+
+            if ($status) {
+                $query->where('status', $status);
+            }
+
+            // 3. Paginate data
+            $transactions = $query->paginate(10);
+
+            // 4. Format struktur JSON agar rapi dan sesuai dengan kolom di database
+            $formattedData = $transactions->getCollection()->map(function ($trx) {
+                return [
+                    'id'               => $trx->id,
+                    'invoice_number'   => $trx->invoice_number ?? 'TRX-' . $trx->id,
+                    'transaction_date' => $trx->created_at ? $trx->created_at->format('Y-m-d H:i:s') : null,
+                    'total_amount'     => (float) $trx->amount_paid, // Sesuai dengan kolom amount_paid pada store()
+                    'payment_method'   => $trx->payment_method ?? 'Cash',
+                    'status'           => $trx->status ?? 'completed',
+                    'items_summary'    => $trx->items->map(function ($item) {
+                        $packageName = $item->fertilizer->name ?? 'Pupuk';
+                        $size        = (float) ($item->fertilizer->packaging_size_kg ?? 50);
+                        $qtyKg       = (float) $item->actual_purchased_kg; // Sesuai kolom actual_purchased_kg pada store()
+                        $sacks       = $size > 0 ? floor($qtyKg / $size) : 0;
+
+                        return [
+                            'fertilizer_id'   => $item->fertilizer_id,
+                            'fertilizer_name' => $packageName,
+                            'quantity_kg'     => $qtyKg,
+                            'quantity_sacks'  => $sacks,
+                            'price_per_kg'    => (float) $item->price_per_kg,
+                            'subtotal'        => (float) $item->subtotal
+                        ];
+                    })
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Berhasil mengambil riwayat transaksi pembelian pupuk.',
+                'data'    => $formattedData,
+                'pagination' => [
+                    'current_page' => $transactions->currentPage(),
+                    'last_page'    => $transactions->lastPage(),
+                    'per_page'     => $transactions->perPage(),
+                    'total'        => $transactions->total(),
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil riwayat transaksi.',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+
+/**
+     * Mengambil detail satu transaksi spesifik milik petani.
+     */
+    public function getTransactionDetail(Request $request, $id)
+    {
+        try {
+            $user = $request->user();
+
+            $transaction = Transaction::with(['items.fertilizer', 'mlLogs'])
+                ->where('id', $id)
+                ->where('farmer_id', $user->id)
+                ->first();
+
+            if (!$transaction) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Transaksi tidak ditemukan.',
+                    'data'    => null
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Detail transaksi ditemukan.',
+                'data'    => $transaction
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil detail transaksi.',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // public function getFertilizerRecommendation(Request $request, $landId, FastApiService $fastApiService)
+    // {
+    //     // 1. Load data lahan beserta tanaman terkait
+    //     $land = Land::with(['farmer', 'plants' => function($query) {
+    //         $query->latest(); 
+    //     }])->find($landId);
+
+    //     if (!$land) {
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => 'Lahan tidak ditemukan'
+    //         ], 404);
+    //     }
+
+    //     $latestPlant = $land->plants->first();
+
+    //     // 2. Konversi luas lahan ke hektar
+    //     $areaInHectares = (float) $land->area;
+    //     $unitCleaned = strtolower(str_replace(' ', '', $land->unit));
+        
+    //     if (str_contains($unitCleaned, 'm2') || str_contains($unitCleaned, 'meterpersegi')) {
+    //         $areaInHectares = $areaInHectares / 10000;
+    //     }
+
+    //     // --- LOGIKA FALLBACK JIKA LAHAN BARU BELUM MEMILIKI RIWAYAT TANAMAN/PUPUK ---
+    //     $komoditasDefault = $latestPlant ? $latestPlant->name : 'Padi';
+    //     $faseDefault = $latestPlant ? $latestPlant->current_phase : 'Vegetatif';
+    //     $jenisPupuk = $request->input('jenis_pupuk_input', $latestPlant->last_fertilizer_type ?? 'NPK');
+    //     $jumlahPupukSebelumnya = (float) $request->input(
+    //         'jumlah_pupuk_fase_sebelumnya_kg', 
+    //         (float) ($latestPlant->last_fertilizer_amount ?? 0.0)
+    //     );
+    //     $faseSebelumnya = $request->input('fase_tanam_sebelumnya', $latestPlant->last_phase ?? 'Tidak Ada');
+
+    //     // 3. Susun payload untuk FastAPI
+    //     $payload = [
+    //         "luas_lahan_hektar"               => $areaInHectares,
+    //         "jenis_komoditas"                 => $request->input('jenis_komoditas', $komoditasDefault), 
+    //         "fase_tanam_saat_ini"             => $request->input('fase_tanam_saat_ini', $faseDefault),
+    //         "jenis_pupuk_input"               => $jenisPupuk, 
+    //         "jumlah_pupuk_fase_sebelumnya_kg" => $jumlahJumlahSebelumnya ?? $jumlahPupukSebelumnya,
+    //         "fase_tanam_sebelumnya"           => $faseSebelumnya,
+    //         "curah_hujan_mm"                  => (float) ($land->average_monthly_precipitation ?? 150.0),
+    //         "suhu_rata_rata_celcius"          => (float) ($land->average_temperature ?? 27.0),
+    //         "kelembapan_persen"               => (int) ($land->average_humidity ?? 80),
+    //     ];
+
+    //     // 4. Kirim ke Python FastAPI
+    //     $result = $fastApiService->predictFertilizer($payload);
+
+    //     if (!$result || !isset($result['recommended_dosage_kg'])) {
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => 'Gagal mendapatkan prediksi dari Engine ML. Pastikan Service Engine ML berjalan.'
+    //         ], 502);
+    //     }
+
+    //     $recommendedKg = (float) $result['recommended_dosage_kg'];
+
+    //     // 🔒 Ambil data pupuk HANYA milik koperasi user login agar spek karung (50 kg) presisi
+    //     $cooperativeId = $request->user() ? $request->user()->cooperative_id : $land->cooperative_id;
+    //     $dbFertilizers = \App\Models\Fertilizer::where('cooperative_id', $cooperativeId)
+    //                         ->where('name', 'LIKE', '%' . $jenisPupuk . '%')
+    //                         ->get();
+
+    //     $recommendations = [];
+
+    //     if ($dbFertilizers->isNotEmpty()) {
+    //         foreach ($dbFertilizers as $index => $dbFertilizer) {
+    //             $beratPerKarung = (int) ($dbFertilizer->packaging_size_kg > 0 ? $dbFertilizer->packaging_size_kg : 50);
+    //             $hargaPerKg = (int) $dbFertilizer->price_per_kg;
+                
+    //             $hargaPerKarung = $hargaPerKg * $beratPerKarung;
+    //             $jumlahKarung = (int) ceil($recommendedKg / $beratPerKarung);
+
+    //             $recommendations[] = [
+    //                 "id" => "rec-" . $landId . "-" . ($index + 1),
+    //                 "fertilizer_id" => $dbFertilizer->id,
+    //                 "fertilizer_code" => $dbFertilizer->fertilizer_code,
+    //                 "nama" => $dbFertilizer->name,
+    //                 "fungsi" => "Optimasi nutrisi untuk fase " . $payload['fase_tanam_saat_ini'] . " (Kemasan " . $beratPerKarung . " Kg)",
+    //                 "price_per_kg" => $hargaPerKg,
+    //                 "harga_per_karung" => $hargaPerKarung,
+    //                 "jumlah_karung" => $jumlahKarung,
+                    
+    //                 "is_ml" => true,
+    //                 "original_recommended_kg" => round($recommendedKg, 2),
+    //                 "original_recommended_bags" => $jumlahKarung,
+    //                 "packaging_size_kg" => $beratPerKarung,
+                    
+    //                 "image_url" => $dbFertilizer->image,
+                    
+    //                 // PENGEMBALIAN FIX: Data ditambahkan agar terintegrasi sempurna dengan FE
+    //                 "analysis_meta" => [
+    //                     "luas_lahan" => $payload['luas_lahan_hektar'] . " Ha",
+    //                     "komoditas" => $payload['jenis_komoditas'],
+    //                     "fase_tanam" => $payload['fase_tanam_saat_ini'],
+    //                     "suhu" => $payload['suhu_rata_rata_celcius'] . "°C",
+    //                     "kelembapan" => $payload['kelembapan_persen'] . "%",
+    //                     "curah_hujan" => $payload['curah_hujan_mm'] . " mm",
+    //                 ]
+    //             ];
+    //         }
+    //     } else {
+    //         // Fallback jika tidak ada data sama sekali di DB
+    //         $fallbackVariations = [
+    //             ["berat" => 50, "harga_kg" => 3000, "suffix" => "50kg"],
+    //         ];
+
+    //         foreach ($fallbackVariations as $index => $var) {
+    //             $jumlahKarung = (int) ceil($recommendedKg / $var['berat']);
+    //             $recommendations[] = [
+    //                 "id" => "rec-" . $landId . "-fallback-" . ($index + 1),
+    //                 "fertilizer_id" => null,
+    //                 "fertilizer_code" => "RAW-" . strtoupper($jenisPupuk) . "-" . $var['berat'] . "KG",
+    //                 "nama" => "Pupuk " . $jenisPupuk . " " . $var['berat'] . "kg",
+    //                 "fungsi" => "Optimasi nutrisi untuk fase " . $payload['fase_tanam_saat_ini'] . " (Kemasan Fallback " . $var['berat'] . " Kg)",
+    //                 "price_per_kg" => $var['harga_kg'],
+    //                 "harga_per_karung" => $var['harga_kg'] * $var['berat'],
+    //                 "jumlah_karung" => $jumlahKarung,
+                    
+    //                 "is_ml" => false,
+    //                 "original_recommended_kg" => round($recommendedKg, 2),
+    //                 "original_recommended_bags" => $jumlahKarung,
+    //                 "packaging_size_kg" => $var['berat'],
+                    
+    //                 "image_url" => null,
+                    
+    //                 // PENGEMBALIAN FIX: Pastikan fallback juga mengirim data cuaca yang sama
+    //                 "analysis_meta" => [
+    //                     "luas_lahan" => $payload['luas_lahan_hektar'] . " Ha",
+    //                     "komoditas" => $payload['jenis_komoditas'],
+    //                     "fase_tanam" => $payload['fase_tanam_saat_ini'],
+    //                     "suhu" => $payload['suhu_rata_rata_celcius'] . "°C",
+    //                     "kelembapan" => $payload['kelembapan_persen'] . "%",
+    //                     "curah_hujan" => $payload['curah_hujan_mm'] . " mm",
+    //                 ]
+    //             ];
+    //         }
+    //     }
+
+    //     return response()->json([
+    //         'success' => true,
+    //         'message' => 'Rekomendasi pupuk berhasil dihitung!',
+    //         'data' => [
+    //             'recommendations' => $recommendations
+    //         ]
+    //     ], 200);
+    // }
+
     public function getFertilizerRecommendation(Request $request, $landId, FastApiService $fastApiService)
     {
         // 1. Load data lahan beserta tanaman terkait
@@ -650,6 +962,8 @@ class FarmerController extends Controller
         $komoditasDefault = $latestPlant ? $latestPlant->name : 'Padi';
         $faseDefault = $latestPlant ? $latestPlant->current_phase : 'Vegetatif';
         $jenisPupuk = $request->input('jenis_pupuk_input', $latestPlant->last_fertilizer_type ?? 'NPK');
+        
+        // FIX: Ambil dari input request atau fallback ke database
         $jumlahPupukSebelumnya = (float) $request->input(
             'jumlah_pupuk_fase_sebelumnya_kg', 
             (float) ($latestPlant->last_fertilizer_amount ?? 0.0)
@@ -662,7 +976,7 @@ class FarmerController extends Controller
             "jenis_komoditas"                 => $request->input('jenis_komoditas', $komoditasDefault), 
             "fase_tanam_saat_ini"             => $request->input('fase_tanam_saat_ini', $faseDefault),
             "jenis_pupuk_input"               => $jenisPupuk, 
-            "jumlah_pupuk_fase_sebelumnya_kg" => $jumlahJumlahSebelumnya ?? $jumlahPupukSebelumnya,
+            "jumlah_pupuk_fase_sebelumnya_kg" => $jumlahPupukSebelumnya, // FIX: Menghilangkan variabel typo
             "fase_tanam_sebelumnya"           => $faseSebelumnya,
             "curah_hujan_mm"                  => (float) ($land->average_monthly_precipitation ?? 150.0),
             "suhu_rata_rata_celcius"          => (float) ($land->average_temperature ?? 27.0),
@@ -683,6 +997,8 @@ class FarmerController extends Controller
 
         // 🔒 Ambil data pupuk HANYA milik koperasi user login agar spek karung (50 kg) presisi
         $cooperativeId = $request->user() ? $request->user()->cooperative_id : $land->cooperative_id;
+        
+        // Kita gunakan first() jika hanya butuh 1 pupuk teratas agar tidak duplikat record
         $dbFertilizers = \App\Models\Fertilizer::where('cooperative_id', $cooperativeId)
                             ->where('name', 'LIKE', '%' . $jenisPupuk . '%')
                             ->get();
@@ -693,9 +1009,15 @@ class FarmerController extends Controller
             foreach ($dbFertilizers as $index => $dbFertilizer) {
                 $beratPerKarung = (int) ($dbFertilizer->packaging_size_kg > 0 ? $dbFertilizer->packaging_size_kg : 50);
                 $hargaPerKg = (int) $dbFertilizer->price_per_kg;
-                
                 $hargaPerKarung = $hargaPerKg * $beratPerKarung;
-                $jumlahKarung = (int) ceil($recommendedKg / $beratPerKarung);
+
+                // --- KALKULASI UTUH & ECERAN ---
+                $fullBags = (int) floor($recommendedKg / $beratPerKarung); // Jumlah Karung Utuh
+                $remainingKg = round(fmod($recommendedKg, $beratPerKarung), 2); // Sisa Kg (Eceran)
+                $totalBagsCeil = (int) ceil($recommendedKg / $beratPerKarung); // Total Karung Pembulatan ke Atas
+
+                // Estimasi Total Harga (Sisa Kg dihitung per-kg)
+                $totalEstimatedPrice = ($fullBags * $hargaPerKarung) + ($remainingKg * $hargaPerKg);
 
                 $recommendations[] = [
                     "id" => "rec-" . $landId . "-" . ($index + 1),
@@ -705,16 +1027,21 @@ class FarmerController extends Controller
                     "fungsi" => "Optimasi nutrisi untuk fase " . $payload['fase_tanam_saat_ini'] . " (Kemasan " . $beratPerKarung . " Kg)",
                     "price_per_kg" => $hargaPerKg,
                     "harga_per_karung" => $hargaPerKarung,
-                    "jumlah_karung" => $jumlahKarung,
+                    
+                    // --- KEBUTUHAN UTAMA FE (DISPLAY REKOMENDASI) ---
+                    "total_recommended_kg" => round($recommendedKg, 2), // Misal: 120 Kg
+                    "full_bags_count"      => $fullBags,                 // Misal: 2 Karung
+                    "remaining_kg"         => $remainingKg,              // Misal: 20 Kg
+                    "formatted_text"       => "{$fullBags} Karung ({$beratPerKarung}kg)" . ($remainingKg > 0 ? " + {$remainingKg} Kg" : ""), 
+                    // Result text contoh: "2 Karung (50kg) + 20 Kg"
+
+                    "jumlah_karung" => $totalBagsCeil, // Tetap disajikan jika FE butuh hitungan opsi pembulatan penuh
+                    "total_estimated_price" => round($totalEstimatedPrice),
                     
                     "is_ml" => true,
-                    "original_recommended_kg" => round($recommendedKg, 2),
-                    "original_recommended_bags" => $jumlahKarung,
                     "packaging_size_kg" => $beratPerKarung,
-                    
                     "image_url" => $dbFertilizer->image,
                     
-                    // PENGEMBALIAN FIX: Data ditambahkan agar terintegrasi sempurna dengan FE
                     "analysis_meta" => [
                         "luas_lahan" => $payload['luas_lahan_hektar'] . " Ha",
                         "komoditas" => $payload['jenis_komoditas'],
@@ -728,11 +1055,15 @@ class FarmerController extends Controller
         } else {
             // Fallback jika tidak ada data sama sekali di DB
             $fallbackVariations = [
-                ["berat" => 50, "harga_kg" => 3000, "suffix" => "50kg"],
+                ["berat" => 50, "harga_kg" => 3000],
             ];
 
             foreach ($fallbackVariations as $index => $var) {
-                $jumlahKarung = (int) ceil($recommendedKg / $var['berat']);
+                $beratPerKarung = $var['berat'];
+                $fullBags = (int) floor($recommendedKg / $beratPerKarung);
+                $remainingKg = round(fmod($recommendedKg, $beratPerKarung), 2);
+                $totalBagsCeil = (int) ceil($recommendedKg / $beratPerKarung);
+
                 $recommendations[] = [
                     "id" => "rec-" . $landId . "-fallback-" . ($index + 1),
                     "fertilizer_id" => null,
@@ -741,16 +1072,18 @@ class FarmerController extends Controller
                     "fungsi" => "Optimasi nutrisi untuk fase " . $payload['fase_tanam_saat_ini'] . " (Kemasan Fallback " . $var['berat'] . " Kg)",
                     "price_per_kg" => $var['harga_kg'],
                     "harga_per_karung" => $var['harga_kg'] * $var['berat'],
-                    "jumlah_karung" => $jumlahKarung,
                     
+                    // --- KEBUTUHAN UTAMA FE ---
+                    "total_recommended_kg" => round($recommendedKg, 2),
+                    "full_bags_count"      => $fullBags,
+                    "remaining_kg"         => $remainingKg,
+                    "formatted_text"       => "{$fullBags} Karung ({$beratPerKarung}kg)" . ($remainingKg > 0 ? " + {$remainingKg} Kg" : ""),
+                    
+                    "jumlah_karung" => $totalBagsCeil,
                     "is_ml" => false,
-                    "original_recommended_kg" => round($recommendedKg, 2),
-                    "original_recommended_bags" => $jumlahKarung,
                     "packaging_size_kg" => $var['berat'],
-                    
                     "image_url" => null,
                     
-                    // PENGEMBALIAN FIX: Pastikan fallback juga mengirim data cuaca yang sama
                     "analysis_meta" => [
                         "luas_lahan" => $payload['luas_lahan_hektar'] . " Ha",
                         "komoditas" => $payload['jenis_komoditas'],

@@ -67,23 +67,23 @@ services:
   #     command: tail -f /dev/null 
 
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: coopflow_frontend
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    environment:
-      - NODE_ENV=development
-      - PORT=3000
-      - HOSTNAME=0.0.0.0  
-      - WATCHPACK_POLLING=true 
-      - CHOKIDAR_USEPOLLING=true
-    command: npm run dev  
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   container_name: coopflow_frontend
+  #   ports:
+  #     - "3000:3000"
+  #   volumes:
+  #     - ./frontend:/app
+  #     - /app/node_modules
+  #   environment:
+  #     - NODE_ENV=development
+  #     - PORT=3000
+  #     - HOSTNAME=0.0.0.0  
+  #     - WATCHPACK_POLLING=true 
+  #     - CHOKIDAR_USEPOLLING=true
+  #   command: npm run dev  
 
 # volumes:
 #   pgdata:

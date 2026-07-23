@@ -13,38 +13,29 @@
 # CMD ["npm", "run", "dev", "--", "-H", "0.0.0.0"]
 
 
-FROM node:20-alpine AS base
+FROM node:20-alpine
 
-# 1. Install dependencies (termasuk devDependencies untuk build)
-FROM base AS deps
 WORKDIR /app
+
+# Copy package management files
 COPY package*.json ./
-# Jalankan npm ci atau npm install tanpa flag --production
+
+# Install SEMUA dependencies (dev & prod) agar CLI 'next' tersedia saat build
 RUN npm install
 
-# 2. Rebuild source code
-FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
+# Copy seluruh source code
 COPY . .
+
+# Build Next.js
 ENV NEXT_TELEMETRY_DISABLED 1
-# Jalankan build Next.js
 RUN npm run build
 
-# 3. Production image, copy all the files and run next
-FROM base AS runner
-WORKDIR /app
-
+# Set environment runtime
 ENV NODE_ENV production
-ENV NEXT_TELEMETRY_DISABLED 1
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
 
-# Copy folder public dan hasil standalone build
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+# Langsung jalankan server bawaan hasil standalone/next start
+CMD ["npx", "next", "start", "-H", "0.0.0.0", "-p", "3000"]

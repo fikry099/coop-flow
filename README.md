@@ -1,8 +1,16 @@
-<p align="left">
-  <img src="logo.png" alt="COOP-FLOW Logo" width="60" align="left" style="margin-right: 15px;" />
-  <h1 style="display: inline-block; margin: 0;">COOP-FLOW — Platform Manajemen & Prediksi Kebutuhan Pupuk KDKMP</h1>
-</p>
-<br clear="left"/>
+<div align="center">
+  <table>
+    <tr>
+      <td align="center" valign="middle">
+        <img src="logo.png" alt="COOP-FLOW Logo" width="90" />
+      </td>
+      <td align="center" valign="middle">
+        <h1>COOP-FLOW — Platform Manajemen & Prediksi Kebutuhan Pupuk KDKMP</h1>
+      </td>
+    </tr>
+  </table>
+</div>
+<br>
 
 **COOP-FLOW** adalah sistem terintegrasi untuk mengoptimalkan distribusi pupuk dan prediksi stok pengadaan bagi koperasi desa merah putih. Sistem ini memanfaatkan arsitektur microservices berbasis Docker yang menghubungkan **Next.js** (Frontend), **Laravel** (Backend REST API), **FastAPI** (ML Engine), serta **PostGIS** (Database Spatial).
 

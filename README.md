@@ -126,6 +126,12 @@ Jalankan migrasi PostGIS beserta seeder bawaan (`RoleAndUserSeeder`, `FarmerSeed
 docker compose exec backend php artisan migrate:fresh --seed
 
 ```
+### 6. Jalankan Inisialisasi Data Wilayah (Indonesia Seeder)
+
+```bash
+docker compose exec backend php artisan laravolt:indonesia:seed
+
+```
 
 ---
 

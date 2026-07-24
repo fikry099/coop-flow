@@ -83,7 +83,7 @@ EOF #jangan lupa di hapus baris ini
 
 ```
 
-# 2. Setup Environment Frontend Next.js. buat file manual seperti biasa dengan nama .env.local
+### 2. Setup Environment Frontend Next.js. buat file manual seperti biasa dengan nama .env.local
 ```bash
 cat << 'EOF' > frontend/.env.local #jangan lupa di hapus baris ini
 NEXT_PUBLIC_API_URL=[http://127.0.0.1:8000](http://127.0.0.1:8000)
@@ -102,7 +102,7 @@ docker compose up -d --build
 
 > *Tunggu beberapa saat hingga seluruh container ter-build dan berstatus `running`.*
 
-### 3. Install Dependency Laravel (Composer)
+### 4. Install Dependency Laravel (Composer)
 
 Jalankan pendaftaran/install ulang dependency PHP di dalam container backend:
 
@@ -111,14 +111,23 @@ docker compose exec backend composer install
 
 ```
 
-### 4. Generate Application Key (Laravel)
+### 5. Install Dependency ML Engine (Python)
+
+Jalankan instalasi dependency Python di dalam container ML Engine:
+
+```bash
+docker compose exec ml-engine pip install -r requirements.txt
+
+```
+
+### 6. Generate Application Key (Laravel)
 
 ```bash
 docker compose exec backend php artisan key:generate
 
 ```
 
-### 5. Jalankan Migrasi Database & Seeder Data
+### 7. Jalankan Migrasi Database & Seeder Data
 
 Jalankan migrasi PostGIS beserta seeder bawaan (`RoleAndUserSeeder`, `FarmerSeeder`, dll):
 
@@ -126,7 +135,7 @@ Jalankan migrasi PostGIS beserta seeder bawaan (`RoleAndUserSeeder`, `FarmerSeed
 docker compose exec backend php artisan migrate:fresh --seed
 
 ```
-### 6. Jalankan Inisialisasi Data Wilayah (Indonesia Seeder)
+### 8. Jalankan Inisialisasi Data Wilayah (Indonesia Seeder)
 
 ```bash
 docker compose exec backend php artisan laravolt:indonesia:seed
